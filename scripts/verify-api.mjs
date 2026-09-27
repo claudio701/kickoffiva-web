@@ -27,6 +27,20 @@ async function api(path, { method = 'GET', token, body, companyId, raw = false }
   return { status: res.status, json, text };
 }
 
+// 0. Preflight CORS con x-company-id (lo que hace el navegador desde www.kickoffiva.cl)
+{
+  const pre = await fetch(`${BASE}/api/cierre/actual`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://www.kickoffiva.cl',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'authorization,x-company-id',
+    },
+  });
+  const allowed = (pre.headers.get('access-control-allow-headers') ?? '').toLowerCase();
+  check('preflight CORS permite x-company-id', pre.status < 400 && allowed.includes('x-company-id'), `status=${pre.status} allow-headers=${allowed}`);
+}
+
 // 1. Registro
 const reg = await api('/auth/register', {
   method: 'POST',

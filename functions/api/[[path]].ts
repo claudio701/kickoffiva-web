@@ -22,7 +22,12 @@ app.use(
         ? origin
         : '',
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    // FIX: x-company-id (empresa activa) faltaba -> el preflight fallaba y el
+    // navegador mostraba "Failed to fetch" en cierre/empresa/libros/sii.
+    allowHeaders: ['Content-Type', 'Authorization', 'x-company-id'],
+    // Para que el frontend pueda leer el nombre del CSV descargado.
+    exposeHeaders: ['Content-Disposition'],
+    maxAge: 86400,
     credentials: true,
   }),
 );
