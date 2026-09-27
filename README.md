@@ -45,9 +45,25 @@ node scripts/verify-api.mjs https://api.kickoffiva.cl
 
 Nunca van en el código ni en Git.
 
+## Alarmas (cron diario)
+
+Motor: `functions/_lib/alerts.ts` (mensajes día 5/10/11/12 + notificaciones SII) expuesto en
+`/api/cron/generar`, `/api/cron/hoy`, `/api/cron/enviada` (header `x-cron-secret`).
+Disparador: Worker `cron-worker/` (Cloudflare Cron Trigger, 12:07 UTC ≈ 09:07 Chile) que genera
+las alertas, envía el **resumen diario por email al equipo** (links `wa.me` listos para reenviar por
+WhatsApp) y, si `SEND_CLIENT_EMAILS=1`, el correo a cada cliente. La tabla `alerts` se crea sola.
+
+Instalar/actualizar: `SETUP-ALARMAS.cmd` (genera el `CRON_SECRET`, lo guarda en Pages y en el Worker,
+despliega ambos y hace una corrida de prueba → `alarmas-prueba.json`). Email vía [Resend](https://resend.com):
+crea la cuenta, agrega la clave (`re_...`) cuando el script la pida o después con
+`cd cron-worker && npx wrangler secret put RESEND_API_KEY`; para escribir a clientes verifica el dominio
+`kickoffiva.cl` en Resend (registros DNS en Cloudflare) y pon `FROM_EMAIL`/`SEND_CLIENT_EMAILS` en `cron-worker/wrangler.toml`.
+Prueba manual: `GET https://kickoffiva-cron.<subdominio>.workers.dev/run` con header `x-cron-secret`.
+Tests: `cd cron-worker && node --test test/*.test.mjs`.
+
 ## Base de datos
 
-- Esquema inicial: `migrations/001_init.sql` (ya aplicado en producción).
+- Esquema inicial: `migrations/001_init.sql` (ya aplicado en producción). Tabla `alerts`: `migrations/003_alerts.sql` (el cron la crea sola si falta).
 - Candado anti-duplicado de empresas: `migrations/002_empresas_unicas.sql` (idempotente).
   Aplicar con:
   ```bash

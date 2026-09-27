@@ -16,6 +16,33 @@ import { SiiClient } from '../_sii/client';
 
 const cron = new Hono<{ Bindings: Env & { CRON_SECRET?: string } }>();
 
+/**
+ * Crea la tabla alerts si no existe (idempotente, una vez por isolate).
+ * Evita depender de una migración manual para que el cron funcione.
+ */
+let alertsTableChecked = false;
+async function ensureAlertsTable(env: Env): Promise<void> {
+  if (alertsTableChecked) return;
+  await q(
+    env,
+    `CREATE TABLE IF NOT EXISTS alerts (
+       id          text PRIMARY KEY,
+       company_id  text NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+       periodo     char(7) NOT NULL,
+       tipo        text NOT NULL,
+       mensaje     text NOT NULL,
+       telefono    text,
+       fecha       date NOT NULL,
+       enviada_en  timestamptz,
+       canal       text,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       UNIQUE (company_id, periodo, tipo)
+     )`,
+  );
+  await q(env, `CREATE INDEX IF NOT EXISTS alerts_fecha_idx ON alerts (fecha)`);
+  alertsTableChecked = true;
+}
+
 function autorizado(c: any): boolean {
   const secret = c.env.CRON_SECRET;
   if (!secret) return false; // sin secret configurado, el cron no existe
@@ -78,6 +105,7 @@ async function empresasConTotales(env: Env, periodo: string): Promise<DatosEmpre
 cron.post('/generar', async (c) => {
   if (!autorizado(c)) return c.json({ error: 'No autorizado' }, 401);
 
+  await ensureAlertsTable(c.env);
   const { fecha, dia, periodo } = hoyEnChile();
   const empresas = await empresasConTotales(c.env, periodo);
 
@@ -156,13 +184,15 @@ cron.post('/generar', async (c) => {
 cron.get('/hoy', async (c) => {
   if (!autorizado(c)) return c.json({ error: 'No autorizado' }, 401);
 
+  await ensureAlertsTable(c.env);
   const { fecha } = hoyEnChile();
   const rows = (await q(
     c.env,
-    `SELECT a.id, a.tipo, a.mensaje, a.telefono, a.enviada_en,
-            c.nombre AS empresa, c.rut
+    `SELECT a.id, a.tipo, a.mensaje, a.telefono, a.enviada_en, a.canal,
+            c.nombre AS empresa, c.rut, u.email, u.nombre AS persona
        FROM alerts a
        JOIN companies c ON c.id = a.company_id
+       JOIN users u ON u.id = c.user_id
       WHERE a.fecha = $1
       ORDER BY a.created_at ASC`,
     [fecha],
@@ -172,8 +202,11 @@ cron.get('/hoy', async (c) => {
     mensaje: string;
     telefono: string | null;
     enviada_en: string | null;
+    canal: string | null;
     empresa: string;
     rut: string;
+    email: string;
+    persona: string | null;
   }>;
 
   return c.json({
@@ -182,13 +215,34 @@ cron.get('/hoy', async (c) => {
       id: r.id,
       empresa: r.empresa,
       rut: r.rut,
+      persona: r.persona,
+      email: r.email,
       tipo: r.tipo,
       mensaje: r.mensaje,
       telefono: r.telefono,
       enviada: Boolean(r.enviada_en),
+      canal: r.canal,
       waLink: r.telefono ? waLink(r.telefono, r.mensaje) : null,
     })),
   });
+});
+
+/** POST /enviada { id, canal } → marca una alerta como enviada (idempotente). */
+cron.post('/enviada', async (c) => {
+  if (!autorizado(c)) return c.json({ error: 'No autorizado' }, 401);
+  await ensureAlertsTable(c.env);
+  const body = (await c.req.json().catch(() => ({}))) as { id?: unknown; canal?: unknown };
+  const id = typeof body.id === 'string' ? body.id : '';
+  const canal = typeof body.canal === 'string' ? body.canal.slice(0, 20) : 'manual';
+  if (!id) return c.json({ error: 'id requerido' }, 400);
+  const rows = (await q(
+    c.env,
+    `UPDATE alerts SET enviada_en = COALESCE(enviada_en, now()), canal = COALESCE(canal, $2)
+      WHERE id = $1 RETURNING id`,
+    [id, canal],
+  )) as { id: string }[];
+  if (rows.length === 0) return c.json({ error: 'Alerta no encontrada' }, 404);
+  return c.json({ ok: true });
 });
 
 export default cron;

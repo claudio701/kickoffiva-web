@@ -1,0 +1,18 @@
+name = "kickoffiva-cron"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# 12:07 UTC = 09:07 Chile en horario de verano (sep–abr) / 08:07 en invierno.
+[triggers]
+crons = ["7 12 * * *"]
+
+[vars]
+API_BASE = "https://api.kickoffiva.cl"
+DIGEST_TO = "claudio@kickoff.cl"
+# Remitente: usa un dominio verificado en Resend (ej. "KickoffIVA <alertas@kickoffiva.cl>").
+# Mientras el dominio no esté verificado, Resend solo entrega a tu propio correo desde onboarding@resend.dev.
+FROM_EMAIL = "KickoffIVA <onboarding@resend.dev>"
+# "1" = enviar cada alerta por email al cliente (requiere FROM_EMAIL con dominio verificado). "0" = solo resumen al equipo.
+SEND_CLIENT_EMAILS = "0"
+
+# Secretos (no van aquí): CRON_SECRET, RESEND_API_KEY  →  npx wrangler secret put <NOMBRE>
