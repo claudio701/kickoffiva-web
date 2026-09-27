@@ -1,0 +1,25 @@
+# KickoffIVA
+
+> KickoffIVA es un servicio chileno de IVA automatizado para pymes: calcula el IVA de cada mes el día 28 (antes de que cierre el mes), genera los libros de compras y ventas en CSV listos para el SII y mantiene el F29 al día, con el respaldo de la consultora tributaria Kickoff (kickoff.cl).
+
+## Qué hace
+
+- Calcula el IVA el día 28 de cada mes, con anticipación suficiente para corregir antes de declarar.
+- Genera libros de compras y ventas en formato CSV compatibles con el SII (Servicio de Impuestos Internos de Chile).
+- Automatiza el ciclo mensual del F29 y alerta ante anomalías, multas y anotaciones.
+
+## Precios
+
+- Plan a Todo Evento: $500.000 CLP/mes (ventas hasta 1.000 UF mensuales, hasta 5 empleados).
+- Servicios puntuales desde $129.000 CLP: regularización de F29 atrasados ($129.000), rebaja de multas ($189.000), convenio de pago con Tesorería ($249.000), levantamiento de anotación en el SII (desde $500.000, garantía de 10 días hábiles).
+
+## Contacto
+
+- WhatsApp: +56 9 9001 4371
+- Respaldo: consultora Kickoff — https://kickoff.cl
+
+## Páginas
+
+- [Home](https://www.kickoffiva.cl/): servicio, precios, calculadora de IVA y preguntas frecuentes.
+- [Política de privacidad](https://www.kickoffiva.cl/privacidad/): tratamiento de datos personales y tributarios.
+- [Términos del servicio](https://www.kickoffiva.cl/terminos/): condiciones de contratación y garantías.

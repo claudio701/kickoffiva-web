@@ -1,0 +1,26 @@
+{
+  "name": "KickoffIVA — Tu IVA al cierre del mes",
+  "short_name": "KickoffIVA",
+  "description": "Resultado de tu IVA el día 28 de cada mes, antes de la propuesta del SII. Brazo automatizado de la consultora Kickoff.",
+  "lang": "es-CL",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0C0C0A",
+  "theme_color": "#0C0C0A",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Calcular mi número",
+      "url": "/#calculadora",
+      "description": "¿Cuánto te ha costado el SII este año?"
+    }
+  ],
+  "categories": ["finance", "business"],
+  "prefer_related_applications": false
+}

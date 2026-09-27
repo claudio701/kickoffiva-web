@@ -1,0 +1,25 @@
+{
+  "//": "Type-check aislado para Cloudflare Pages Functions (functions/). No toca tsconfig.app.json ni tsconfig.node.json (Vite). Ejecutar: npx tsc -p tsconfig.functions.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": [],
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "isolatedModules": true
+  },
+  "include": ["functions/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src"]
+}

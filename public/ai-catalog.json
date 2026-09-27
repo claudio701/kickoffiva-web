@@ -1,0 +1,61 @@
+{
+  "name": "KickoffIVA",
+  "description": "Servicio chileno de IVA automatizado para pymes: calcula el IVA el día 28 de cada mes, genera libros de compras y ventas en CSV listos para el SII y mantiene el F29 al día. Respaldo de la consultora tributaria Kickoff.",
+  "url": "https://www.kickoffiva.cl/",
+  "language": "es-CL",
+  "country": "CL",
+  "provider": {
+    "name": "Kickoff",
+    "url": "https://kickoff.cl"
+  },
+  "contact": {
+    "whatsapp": "+56990014371",
+    "whatsappUrl": "https://wa.me/56990014371"
+  },
+  "services": [
+    {
+      "name": "Plan a Todo Evento",
+      "description": "IVA automatizado todos los meses: cálculo el día 28, libros CSV para el SII y F29 al día. Ventas hasta 1.000 UF mensuales, hasta 5 empleados.",
+      "price": 500000,
+      "currency": "CLP",
+      "billingPeriod": "monthly",
+      "priceType": "fixed"
+    },
+    {
+      "name": "Levantamiento de anotación en el SII",
+      "description": "Levantamiento de anotaciones en el SII con garantía de 10 días hábiles o devolución del 50% del fee.",
+      "price": 500000,
+      "currency": "CLP",
+      "billingPeriod": "one-time",
+      "priceType": "from"
+    },
+    {
+      "name": "Rebaja de multa injusta o desproporcionada",
+      "description": "Defensa tributaria con criterio, no plantillas, para rebajar multas del SII.",
+      "price": 189000,
+      "currency": "CLP",
+      "billingPeriod": "one-time",
+      "priceType": "fixed"
+    },
+    {
+      "name": "Regularización de F29 atrasados",
+      "description": "Todos los meses pendientes, declarados y en regla ante el SII.",
+      "price": 129000,
+      "currency": "CLP",
+      "billingPeriod": "one-time",
+      "priceType": "fixed"
+    },
+    {
+      "name": "Convenio de pago con Tesorería",
+      "description": "Negociación de cuotas con Tesorería General de la República.",
+      "price": 249000,
+      "currency": "CLP",
+      "billingPeriod": "one-time",
+      "priceType": "fixed"
+    }
+  ],
+  "pages": {
+    "privacy": "https://www.kickoffiva.cl/privacidad/",
+    "terms": "https://www.kickoffiva.cl/terminos/"
+  }
+}

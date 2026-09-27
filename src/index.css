@@ -1,0 +1,90 @@
+/* Subset latin únicamente: el sitio es es-CL y no usa cirílico, griego,
+   vietnamita ni latin-ext. Cada variante latin-* declara 1 solo @font-face
+   con font-display: swap (antes: 44 bloques entre todos los subsets). */
+@import "@fontsource/fraunces/latin-600.css";
+@import "@fontsource/fraunces/latin-700.css";
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tema único oscuro de marca (la app es dark-only) */
+    --background: 60 11% 4%;        /* #0C0C0A aprox */
+    --foreground: 45 29% 93%;       /* #F2EFE6 */
+    --card: 60 9% 8%;
+    --card-foreground: 45 29% 93%;
+    --popover: 60 9% 8%;
+    --popover-foreground: 45 29% 93%;
+    --primary: 72 84% 62%;          /* lima cancha */
+    --primary-foreground: 60 11% 4%;
+    --secondary: 60 6% 14%;
+    --secondary-foreground: 45 29% 93%;
+    --muted: 60 6% 14%;
+    --muted-foreground: 45 7% 58%;    /* #9C978B */
+    --accent: 60 6% 14%;
+    --accent-foreground: 45 29% 93%;
+    --destructive: 35 80% 57%;
+    --destructive-foreground: 60 11% 4%;
+    --border: 60 10% 13%;            /* #26261F */
+    --input: 60 10% 16%;
+    --ring: 72 84% 62%;
+    --radius: 0.75rem;
+    --sidebar-background: 60 9% 8%;
+    --sidebar-foreground: 45 29% 93%;
+    --sidebar-primary: 72 84% 62%;
+    --sidebar-primary-foreground: 60 11% 4%;
+    --sidebar-accent: 60 6% 14%;
+    --sidebar-accent-foreground: 45 29% 93%;
+    --sidebar-border: 60 10% 13%;
+    --sidebar-ring: 72 84% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-tinta text-papel font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: #c8f04a;
+    color: #0c0c0a;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-marquee {
+    animation: none;
+  }
+}
+
+@layer components {
+  /* Etiqueta mono superior de sección, estilo editorial */
+  .kicker {
+    @apply font-mono text-[11px] sm:text-xs uppercase tracking-[0.22em] text-humo;
+  }
+  /* Titular grande Fraunces */
+  .headline {
+    @apply font-display font-semibold leading-[1.02] tracking-[-0.01em] text-papel;
+  }
+  /* Contenedor editorial */
+  .wrap {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+}
