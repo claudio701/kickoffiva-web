@@ -13,6 +13,7 @@ import { q, type Env } from '../_lib/db';
 import { alertaDelDia, alertaSiiNotificacion, hoyEnChile, waLink, type DatosEmpresa } from '../_lib/alerts';
 import { getSiiCreds } from '../_lib/crypto';
 import { SiiClient } from '../_sii/client';
+import { loadDocsPeriodo, migrateLegacyDocs } from '../_lib/documents';
 
 const cron = new Hono<{ Bindings: Env & { CRON_SECRET?: string } }>();
 
@@ -55,32 +56,24 @@ interface EmpresaRow {
   persona: string | null;
   telefono: string | null;
   tasa_ppm: number | string | null;
-  ventas_netas: number | string | null;
-  compras_netas: number | string | null;
-  debito: number | string | null;
-  credito: number | string | null;
 }
 
 async function empresasConTotales(env: Env, periodo: string): Promise<DatosEmpresa[]> {
   const rows = (await q(
     env,
-    `SELECT c.id, c.nombre, u.nombre AS persona, u.telefono, c.tasa_ppm,
-            COALESCE(SUM(CASE WHEN d.tipo = 'venta'  THEN d.neto END), 0) AS ventas_netas,
-            COALESCE(SUM(CASE WHEN d.tipo = 'compra' THEN d.neto END), 0) AS compras_netas,
-            COALESCE(SUM(CASE WHEN d.tipo = 'venta'  THEN d.iva END), 0)  AS debito,
-            COALESCE(SUM(CASE WHEN d.tipo = 'compra' THEN d.iva END), 0)  AS credito
+    `SELECT c.id, c.nombre, u.nombre AS persona, u.telefono, c.tasa_ppm
        FROM companies c
-       JOIN users u ON u.id = c.user_id
-       LEFT JOIN documents d ON d.company_id = c.id AND d.periodo = $1
-      GROUP BY c.id, c.nombre, u.nombre, u.telefono, c.tasa_ppm`,
-    [periodo],
+       JOIN users u ON u.id = c.user_id`,
   )) as EmpresaRow[];
+  // Los documentos están cifrados: se descifran en la app y se suman aquí.
+  const porEmpresa = await loadDocsPeriodo(env, periodo);
 
   return rows.map((r) => {
-    const ventasNetas = Number(r.ventas_netas) || 0;
-    const comprasNetas = Number(r.compras_netas) || 0;
-    const debitoFiscal = Number(r.debito) || 0;
-    const creditoFiscal = Number(r.credito) || 0;
+    let ventasNetas = 0, comprasNetas = 0, debitoFiscal = 0, creditoFiscal = 0;
+    for (const d of porEmpresa.get(r.id) ?? []) {
+      if (d.tipo === 'venta') { ventasNetas += d.neto; debitoFiscal += d.iva; }
+      else if (d.tipo === 'compra') { comprasNetas += d.neto; creditoFiscal += d.iva; }
+    }
     const ivaAPagar = Math.max(0, debitoFiscal - creditoFiscal);
     const tasaPpm = Number(r.tasa_ppm) || 0;
     const ppm = Math.round(ventasNetas * tasaPpm);
@@ -243,6 +236,16 @@ cron.post('/enviada', async (c) => {
   )) as { id: string }[];
   if (rows.length === 0) return c.json({ error: 'Alerta no encontrada' }, 404);
   return c.json({ ok: true });
+});
+
+/**
+ * POST /migrar-documentos → cifra las filas legacy de `documents` (columnas en
+ * claro) en lotes. Idempotente; llamar hasta que pendientes = 0.
+ */
+cron.post('/migrar-documentos', async (c) => {
+  if (!autorizado(c)) return c.json({ error: 'No autorizado' }, 401);
+  const r = await migrateLegacyDocs(c.env, 500);
+  return c.json({ ok: true, ...r });
 });
 
 export default cron;

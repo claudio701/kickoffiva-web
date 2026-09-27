@@ -55,6 +55,18 @@ export async function runJob(env) {
   try {
     generar = await api(env, '/api/cron/generar', { method: 'POST', body: '{}' });
     log.push(`generar: ${JSON.stringify(generar)}`);
+
+    // Migración de documentos legacy (columnas en claro → cifrado). Idempotente y
+    // barata: cuando no queda nada, responde pendientes=0 y no hace nada más.
+    try {
+      for (let i = 0; i < 5; i++) {
+        const m = await api(env, '/api/cron/migrar-documentos', { method: 'POST', body: '{}' });
+        log.push(`migrar-documentos: ${JSON.stringify(m)}`);
+        if (!m || !(m.pendientes > 0)) break;
+      }
+    } catch (e) {
+      log.push(`migrar-documentos: ${e.message}`); // no bloquea las alertas
+    }
     hoy = await api(env, '/api/cron/hoy');
     log.push(`hoy: ${hoy.alertas.length} alerta(s)`);
 

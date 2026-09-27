@@ -61,6 +61,19 @@ crea la cuenta, agrega la clave (`re_...`) cuando el script la pida o después c
 Prueba manual: `GET https://kickoffiva-cron.<subdominio>.workers.dev/run` con header `x-cron-secret`.
 Tests: `cd cron-worker && node --test test/*.test.mjs`.
 
+## Cifrado de datos
+
+- **Registros del SII (`documents`)**: cada documento (fecha, RUT emisor, folio, razón social, montos)
+  se guarda como un blob AES-256-GCM en `datos_enc`; en claro quedan solo empresa, período y tipo, más
+  un índice ciego HMAC (`doc_hash`) para detectar duplicados. Llaves derivadas por HKDF desde `SII_ENC_KEY`.
+  Toda lectura/escritura pasa por `functions/_lib/documents.ts`; los cálculos (cierre, alarmas, CSV) se
+  hacen en la app tras descifrar. Filas antiguas en claro se migran solas (`POST /api/cron/migrar-documentos`,
+  lo llama el Worker del cron). Esquema: `migrations/004_documents_cifrado.sql`.
+- **Clave tributaria del SII**: AES-256-GCM (`functions/_lib/crypto.ts`), nunca en claro.
+- **Contraseñas**: PBKDF2-SHA256, 100.000 iteraciones.
+- Neon cifra además en reposo (AES-256) y en tránsito (TLS).
+- Rotación de `SII_ENC_KEY` implica re-cifrar (no hay rotación automática todavía).
+
 ## Base de datos
 
 - Esquema inicial: `migrations/001_init.sql` (ya aplicado en producción). Tabla `alerts`: `migrations/003_alerts.sql` (el cron la crea sola si falta).
@@ -92,7 +105,7 @@ La empresa activa se elige con el header `x-company-id` (validado contra el usua
 
 ## Tests y QA
 
-- `node --test tests/*.test.mjs` — RUT, sanitización, lógica pura.
+- `node --test tests/*.test.mjs` — RUT, sanitización, cifrado de documentos, lógica pura.
 - `node tests/e2e-local.mjs` — cierre de IVA con datos de ejemplo (sin red).
 - `node scripts/verify-api.mjs https://api.kickoffiva.cl` — 36 checks contra producción
   (crea cuentas `test.*@kickoffiva.cl` / `persona.*@kickoffiva.cl`; limpiar con el `DELETE` comentado

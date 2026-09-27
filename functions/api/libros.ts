@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
-import { q, type Env } from '../_lib/db';
+import { type Env } from '../_lib/db';
 import { authUser, resolveCompany } from '../_lib/jwt';
 import { buildCsv } from '../_lib/csv';
+import { insertDoc, loadDocs } from '../_lib/documents';
 
 const libros = new Hono<{ Bindings: Env }>();
 
@@ -16,48 +17,23 @@ function badPeriodo(c: any): Response {
   return c.json({ error: 'Periodo inválido, use formato YYYY-MM' }, 400);
 }
 
-interface LibroRow {
-  fecha: string | null;
-  rut_emisor: string | null;
-  folio: string | number | null;
-  razon_social: string | null;
-  neto: number | string;
-  iva: number | string;
-  total: number | string | null;
-}
-
-function formatFecha(fecha: string | null): string {
-  if (!fecha) return '';
-  // Normalize to YYYY-MM-DD regardless of driver date serialization.
-  const d = new Date(fecha);
-  if (Number.isNaN(d.getTime())) return String(fecha).slice(0, 10);
-  return d.toISOString().slice(0, 10);
-}
-
 async function libroCsv(
   c: any,
   companyId: string,
   tipo: 'compra' | 'venta',
   periodo: string,
 ): Promise<Response> {
-  const rows = (await q(
-    c.env,
-    `SELECT fecha, rut_emisor, folio, razon_social, neto, iva, total
-       FROM documents
-      WHERE company_id = $1 AND tipo = $2
-        AND periodo = $3
-      ORDER BY fecha ASC, folio ASC`,
-    [companyId, tipo, periodo],
-  )) as LibroRow[];
+  // Los documentos se guardan cifrados; loadDocs los descifra y ordena por fecha/folio.
+  const docs = await loadDocs(c.env, companyId, periodo, tipo);
 
-  const dataRows: (string | number)[][] = rows.map((r) => [
-    formatFecha(r.fecha),
-    r.rut_emisor ?? '',
-    r.folio != null ? String(r.folio) : '',
-    r.razon_social ?? '',
-    Math.round(Number(r.neto) || 0),
-    Math.round(Number(r.iva) || 0),
-    Math.round(Number(r.total) || 0),
+  const dataRows: (string | number)[][] = docs.map((d) => [
+    d.fecha ?? '',
+    d.rutEmisor ?? '',
+    d.folio ?? '',
+    d.razonSocial ?? '',
+    d.neto,
+    d.iva,
+    d.total,
   ]);
 
   const csv = buildCsv(CSV_HEADERS, dataRows);
@@ -164,28 +140,16 @@ libros.post('/upload', async (c) => {
     const neto = d.neto as number;
     const iva = d.iva as number;
     const total = isNonNegInt(d.total) ? d.total : neto + iva;
-    const result = (await q(
-      c.env,
-      `INSERT INTO documents
-         (id, company_id, periodo, tipo, fecha, rut_emisor, folio, razon_social, neto, iva, total)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       ON CONFLICT (company_id, tipo, folio, rut_emisor) DO NOTHING
-       RETURNING id`,
-      [
-        crypto.randomUUID(),
-        companyId,
-        periodo,
-        tipo,
-        d.fecha ?? null,
-        d.rutEmisor ?? null,
-        String(d.folio).trim(),
-        d.razonSocial ?? null,
-        neto,
-        iva,
-        total,
-      ],
-    )) as { id: string }[];
-    if (result.length > 0) insertados += 1;
+    const ok = await insertDoc(c.env, companyId, periodo, tipo, {
+      fecha: d.fecha ?? null,
+      rutEmisor: d.rutEmisor ?? null,
+      folio: String(d.folio).trim(),
+      razonSocial: d.razonSocial ?? null,
+      neto,
+      iva,
+      total,
+    });
+    if (ok) insertados += 1;
     else duplicados += 1;
   }
 

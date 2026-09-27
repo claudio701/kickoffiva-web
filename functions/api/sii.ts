@@ -9,8 +9,8 @@
  *      (los guarda PUT /api/empresa/sii, ruta de otro agente).
  *   3. SiiClient.login() y descarga en paralelo de ambos libros
  *      (Promise.allSettled: un lado caído no tira el otro).
- *   4. Upsert idempotente en `documents` con
- *      ON CONFLICT (company_id, tipo, folio, rut_emisor) DO NOTHING.
+ *   4. Inserción cifrada e idempotente en `documents` (índice ciego por
+ *      empresa+tipo+folio+RUT emisor; ver _lib/documents.ts).
  *
  * Respuestas:
  *   200 { periodo, compras: { n, errores? }, ventas: { n, errores? } }
@@ -23,7 +23,7 @@
 import { Hono } from 'hono';
 import { authUser, resolveCompany } from '../_lib/jwt';
 import { getSiiCreds } from '../_lib/crypto';
-import { q } from '../_lib/db';
+import { insertDoc } from '../_lib/documents';
 import {
   SiiClient,
   CredencialesInvalidas,
@@ -106,26 +106,16 @@ async function handleSincronizar(c: any): Promise<Response> {
     let errores = 0;
     for (const doc of docs) {
       try {
-        await q(
-          c.env,
-          `INSERT INTO documents
-             (id, company_id, periodo, tipo, folio, rut_emisor, fecha, neto, iva, total, razon_social)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (company_id, tipo, folio, rut_emisor) DO NOTHING`,
-          [
-            crypto.randomUUID(),
-            companyId,
-            periodoDb,
-            tipo,
-            doc.folio,
-            doc.rutEmisor,
-            doc.fecha,
-            doc.neto,
-            doc.iva,
-            doc.total,
-            doc.razonSocial,
-          ],
-        );
+        // Cifrado en la app + índice ciego: el duplicado no inserta (idempotente).
+        await insertDoc(c.env, companyId, periodoDb, tipo, {
+          folio: doc.folio,
+          rutEmisor: doc.rutEmisor,
+          fecha: doc.fecha,
+          neto: doc.neto,
+          iva: doc.iva,
+          total: doc.total,
+          razonSocial: doc.razonSocial,
+        });
       } catch {
         errores++;
       }

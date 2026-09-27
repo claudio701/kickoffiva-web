@@ -19,6 +19,7 @@ test('runJob: genera, envía email al cliente, marca enviada y manda resumen', a
   const alertas = [{ id: 'a1', empresa: 'E1', rut: '76.123.456-0', persona: 'Ana', email: 'ana@e1.cl', tipo: 'numero', mensaje: 'hola *$1*', telefono: '+56911111111', enviada: false, waLink: 'https://wa.me/1' }];
   const calls = mockFetch([
     ['/api/cron/generar', (init) => { assert.equal(init.headers['x-cron-secret'], 's3cret'); return json({ empresas: 1, creadas: 1, siiRevisadas: 0 }); }],
+    ['/api/cron/migrar-documentos', () => json({ ok: true, migradas: 0, pendientes: 0 })],
     ['/api/cron/hoy', () => json({ fecha: '2026-10-10', alertas })],
     ['/api/cron/enviada', (init) => { assert.equal(JSON.parse(init.body).id, 'a1'); return json({ ok: true }); }],
     ['api.resend.com', () => json({ id: 'email_1' })],
@@ -35,6 +36,7 @@ test('runJob: genera, envía email al cliente, marca enviada y manda resumen', a
 test('runJob: día sin alertas no manda resumen', async () => {
   const calls = mockFetch([
     ['/api/cron/generar', () => json({ empresas: 3, creadas: 0 })],
+    ['/api/cron/migrar-documentos', () => json({ ok: true, migradas: 2, pendientes: 0 })],
     ['/api/cron/hoy', () => json({ fecha: '2026-10-03', alertas: [] })],
   ]);
   const r = await runJob(env);
@@ -57,6 +59,7 @@ test('runJob: si la API falla, avisa por email al equipo y no revienta', async (
 test('runJob: sin RESEND_API_KEY no envía nada pero corre', async () => {
   mockFetch([
     ['/api/cron/generar', () => json({ empresas: 1, creadas: 1 })],
+    ['/api/cron/migrar-documentos', () => json({ error: 'x' }, 500)],
     ['/api/cron/hoy', () => json({ fecha: '2026-10-12', alertas: [{ id: 'z', empresa: 'E', rut: 'r', email: 'e@e.cl', tipo: 'ultimo_dia', mensaje: 'm', telefono: null, enviada: false }] })],
   ]);
   const r = await runJob({ ...env, RESEND_API_KEY: undefined });

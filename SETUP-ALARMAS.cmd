@@ -40,11 +40,14 @@ if errorlevel 1 (
 )
 echo.
 set "RESEND_API_KEY="
-set /p RESEND_API_KEY="Clave API de Resend (re_...). Enter para omitir y configurarla despues: "
+choice /c SN /t 45 /d N /m "Tienes ya una clave API de Resend (re_...) para el email? S=si, N=no (en 45 s sigue solo)"
+if errorlevel 2 goto :sinresend
+set /p RESEND_API_KEY="Pega la clave de Resend y Enter: "
 if not "%RESEND_API_KEY%"=="" (
   echo %RESEND_API_KEY%| call npx --yes wrangler@4 secret put RESEND_API_KEY >> "%LOG%" 2>&1
   if errorlevel 1 ( echo [AVISO] no se pudo guardar RESEND_API_KEY; el cron correra sin email. )
 )
+:sinresend
 set "RESEND_API_KEY="
 
 rem --- 4) Deploy del Worker con el cron ------------------------------------
@@ -56,6 +59,10 @@ rem --- 5) Corrida de prueba ------------------------------------------------
 echo [5/5] Corrida de prueba del cron...
 for /f "delims=" %%U in ('powershell -NoProfile -Command "$l = Get-Content -Raw '%LOG%'; if ($l -match 'https://kickoffiva-cron[^\s]*workers\.dev') { $matches[0] } else { '' }"') do set "WURL=%%U"
 if "%WURL%"=="" ( echo [AVISO] no encontre la URL del Worker en el log; pruebalo desde el dashboard de Cloudflare. & goto :ok )
+echo Worker: %WURL%
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%WURL%/run' -Headers @{ 'x-cron-secret' = '%CRON_SECRET%' } -TimeoutSec 120; $r.Content | Out-File -Encoding utf8 '%~dp0..\alarmas-prueba.json'; $r.Content } catch { ('ERROR: ' + $_.Exception.Message) | Tee-Object -FilePath '%~dp0..\alarmas-prueba.json' }"
+
+:ok )
 echo Worker: %WURL%
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%WURL%/run' -Headers @{ 'x-cron-secret' = '%CRON_SECRET%' } -TimeoutSec 90; $r.Content } catch { 'ERROR: ' + $_.Exception.Message }" | tee "%~dp0..\alarmas-prueba.json" 2>nul || powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%WURL%/run' -Headers @{ 'x-cron-secret' = '%CRON_SECRET%' } -TimeoutSec 90; $r.Content | Out-File -Encoding utf8 '%~dp0..\alarmas-prueba.json'; $r.Content } catch { 'ERROR: ' + $_.Exception.Message }"
 

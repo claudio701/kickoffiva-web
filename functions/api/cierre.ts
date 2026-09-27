@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { authUser, resolveCompany } from '../_lib/jwt';
 import { calcCierre, type DocSii } from '../_lib/iva';
+import { loadDocs } from '../_lib/documents';
 
 const cierre = new Hono<{ Bindings: Env }>();
 
@@ -21,16 +22,6 @@ function currentPeriodo(): string {
   const year = parts.find((p) => p.type === 'year')!.value;
   const month = parts.find((p) => p.type === 'month')!.value;
   return `${year}-${month}`;
-}
-
-interface DocRow {
-  tipo: string;
-  fecha: string | null;
-  rut_emisor: string | null;
-  folio: string | number | null;
-  neto: number | string;
-  iva: number | string;
-  total: number | string | null;
 }
 
 cierre.get('/actual', async (c) => {
@@ -61,28 +52,22 @@ async function handleCierre(
 ): Promise<Response> {
   const env = c.env;
 
-  const rows = (await q(
-    env,
-    `SELECT tipo, fecha, rut_emisor, folio, neto, iva, total
-       FROM documents
-      WHERE company_id = $1
-        AND periodo = $2`,
-    [companyId, periodo],
-  )) as DocRow[];
+  // Documentos cifrados en la base; loadDocs los descifra.
+  const docs = await loadDocs(env, companyId, periodo);
 
   const ventas: DocSii[] = [];
   const compras: DocSii[] = [];
-  for (const r of rows) {
+  for (const d of docs) {
     const doc: DocSii = {
-      fecha: r.fecha ?? undefined,
-      rutEmisor: r.rut_emisor ?? undefined,
-      folio: r.folio ?? undefined,
-      neto: Number(r.neto) || 0,
-      iva: Number(r.iva) || 0,
-      total: r.total != null ? Number(r.total) || 0 : undefined,
+      fecha: d.fecha ?? undefined,
+      rutEmisor: d.rutEmisor ?? undefined,
+      folio: d.folio ?? undefined,
+      neto: d.neto,
+      iva: d.iva,
+      total: d.total,
     };
-    if (r.tipo === 'venta') ventas.push(doc);
-    else if (r.tipo === 'compra') compras.push(doc);
+    if (d.tipo === 'venta') ventas.push(doc);
+    else if (d.tipo === 'compra') compras.push(doc);
   }
 
   const companyRows = (await q(

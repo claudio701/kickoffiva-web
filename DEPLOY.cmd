@@ -30,7 +30,7 @@ if errorlevel 1 ( echo [ERROR] npm install fallo. Revisa deploy.log & goto :fin 
 echo. >> "%LOG%"
 echo ==== 2/5 tests + type-check functions ==== >> "%LOG%"
 echo [2/5] tests y type-check ...
-call node --test tests/sanitize.test.mjs tests/rut.test.mjs >> "%LOG%" 2>&1
+call node --test tests/*.test.mjs cron-worker/test/*.test.mjs >> "%LOG%" 2>&1
 if errorlevel 1 ( echo [ERROR] tests fallaron. Revisa deploy.log & goto :fin )
 call npx tsc -p tsconfig.functions.json >> "%LOG%" 2>&1
 if errorlevel 1 ( echo [ERROR] type-check de functions fallo. Revisa deploy.log & goto :fin )
