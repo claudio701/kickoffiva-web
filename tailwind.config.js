@@ -92,6 +92,11 @@ module.exports = {
           from: { transform: "translateX(0)" },
           to: { transform: "translateX(-50%)" },
         },
+        saludo: {
+          "0%,60%,100%": { transform: "rotate(0deg)" },
+          "15%,45%": { transform: "rotate(-18deg)" },
+          "30%": { transform: "rotate(14deg)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",

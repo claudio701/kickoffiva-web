@@ -14,6 +14,7 @@ import Faq from "../sections/Faq";
 import CtaFinal from "../sections/CtaFinal";
 import Footer from "../sections/Footer";
 import StickyCta from "../sections/StickyCta";
+import Asistente from "../components/Asistente";
 import { useEffect } from "react";
 
 export default function Home() {
@@ -53,6 +54,7 @@ export default function Home() {
       </main>
       <Footer />
       <StickyCta />
+      <Asistente />
     </div>
   );
 }

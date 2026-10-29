@@ -13,7 +13,7 @@
  *      empresa+tipo+folio+RUT emisor; ver _lib/documents.ts).
  *
  * Respuestas:
- *   200 { periodo, compras: { n, errores? }, ventas: { n, errores? } }
+ *   200 { periodo, compras: { n, errores? }, ventas: { n, errores? }, tasaPpm: number|null }
  *   400 { error: "Credenciales SII no configuradas" }   (sin credenciales)
  *   400 { error: "Credenciales SII rechazadas por el portal" } (login rechazado)
  *   401 { error: "No autorizado" }
@@ -30,6 +30,7 @@ import {
   SiiNoDisponible,
 } from '../_sii/client';
 import type { DocumentoRcv } from '../_sii/parse';
+import { actualizarTasaPpmDesdeSii } from '../_lib/ppm';
 
 const SII_NO_DISPONIBLE = 'El SII no está disponible, intenta más tarde';
 
@@ -88,10 +89,13 @@ async function handleSincronizar(c: any): Promise<Response> {
     throw e;
   }
 
-  const [comprasRes, ventasRes] = await Promise.allSettled([
+  const [comprasRes, ventasRes, tasaRes] = await Promise.allSettled([
     client.getLibroCompras(periodo),
     client.getLibroVentas(periodo),
+    // La tasa de PPM la fija el SII: se lee de la propuesta F29 (best-effort).
+    actualizarTasaPpmDesdeSii(c.env, companyId, client, periodo),
   ]);
+  const tasaPpm = tasaRes.status === 'fulfilled' ? tasaRes.value : null;
 
   /** Inserta los docs de un libro y cuenta los errores de inserción. */
   const persistir = async (
@@ -126,7 +130,7 @@ async function handleSincronizar(c: any): Promise<Response> {
   try {
     const compras = await persistir(comprasRes, 'compra');
     const ventas = await persistir(ventasRes, 'venta');
-    return c.json({ periodo, compras, ventas });
+    return c.json({ periodo, compras, ventas, tasaPpm });
   } catch (e) {
     if (e instanceof SiiNoDisponible) {
       return c.json({ error: SII_NO_DISPONIBLE }, 503);

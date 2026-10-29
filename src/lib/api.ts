@@ -67,8 +67,8 @@ export interface Empresa {
   nombre: string;
   rut: string;
   tasaPpm: number;
-  /** false = es el 1% por defecto, el cliente aún no confirmó la tasa que le fijó el SII. */
-  tasaPpmConfirmada: boolean;
+  /** De dónde salió la tasa: 'sii' (leída del F29), 'defecto' (1% mientras no la leemos), 'manual' (equipo). */
+  tasaPpmOrigen: "sii" | "defecto" | "manual";
   siiConfigurado: boolean;
 }
 
@@ -76,6 +76,8 @@ export interface ResultadoSync {
   periodo: string;
   compras: { n: number; errores?: number };
   ventas: { n: number; errores?: number };
+  /** Tasa PPM leída del SII en esta sincronización (fracción), o null si no se pudo. */
+  tasaPpm?: number | null;
 }
 
 export class ApiError extends Error {
@@ -283,7 +285,7 @@ export async function getEmpresa(): Promise<Empresa | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
   const data = (await res.json()) as Empresa;
-  return { ...data, tasaPpm: Number(data.tasaPpm) || 0, tasaPpmConfirmada: Boolean(data.tasaPpmConfirmada) };
+  return { ...data, tasaPpm: Number(data.tasaPpm) || 0, tasaPpmOrigen: data.tasaPpmOrigen ?? "defecto" };
 }
 
 export async function guardarCredencialesSii(
@@ -296,15 +298,6 @@ export async function guardarCredencialesSii(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rutSii, claveSii }),
-  });
-}
-
-export async function guardarTasaPpm(tasa: number): Promise<{ ok: true; tasaPpm: number }> {
-  // PUT /api/empresa/ppm (Bearer) — tasa como fracción (0.0025 = 0,25%)
-  return apiJson("/api/empresa/ppm", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tasaPpm: tasa }),
   });
 }
 

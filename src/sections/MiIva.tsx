@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { clp, waUrl, WHATSAPP_MANDATARIO_URL } from "../config";
+import { clp, WHATSAPP_MANDATARIO_URL } from "../config";
 import {
   ApiError,
   crearEmpresa,
@@ -11,7 +11,6 @@ import {
   getMe,
   getToken,
   guardarCredencialesSii,
-  guardarTasaPpm,
   login,
   logout,
   register,
@@ -26,6 +25,7 @@ import {
 import { rutValido } from "../lib/rut";
 import { mesLargo, tasaPpmTexto } from "../lib/formato";
 import Turnstile, { TURNSTILE_ACTIVO } from "../components/Turnstile";
+import { abrirAsistente } from "../lib/asistente";
 import { leerCalcGuardada } from "./Calculadora";
 
 const ESTADO_STYLES: Record<EstadoCierre, string> = {
@@ -56,8 +56,6 @@ function periodoActual(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-const WHATSAPP_AYUDA_URL = waUrl("Hola, estoy en Mi IVA y necesito ayuda para seguir.");
-
 type Modo = "login" | "register";
 
 interface ErroresRegistro {
@@ -86,11 +84,6 @@ export default function MiIva() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaKey, setCaptchaKey] = useState(0);
 
-  // ── Tasa PPM ──
-  const [editandoPpm, setEditandoPpm] = useState(false);
-  const [ppmTexto, setPpmTexto] = useState("");
-  const [ppmCargando, setPpmCargando] = useState(false);
-  const [ppmError, setPpmError] = useState<string | null>(null);
 
   // ── Empresas de la cuenta ──
   const [empresas, setEmpresas] = useState<EmpresaResumen[] | null>(null);
@@ -280,27 +273,6 @@ export default function MiIva() {
     }
   };
 
-  const onGuardarPpm = async (ev: React.FormEvent) => {
-    ev.preventDefault();
-    setPpmError(null);
-    // La persona escribe el porcentaje como lo ve en su F29: "0,25" o "1".
-    const pct = Number(ppmTexto.replace("%", "").replace(",", ".").trim());
-    if (!ppmTexto.trim() || !Number.isFinite(pct) || pct < 0 || pct > 30) {
-      setPpmError("Escribe solo el número del porcentaje. Ejemplo: 0,25 o 1");
-      return;
-    }
-    setPpmCargando(true);
-    try {
-      await guardarTasaPpm(Math.round(pct * 10000) / 1000000);
-      setEditandoPpm(false);
-      setEmpresa(await getEmpresa());
-      await cargarCierre();
-    } catch (e) {
-      setPpmError(manejarError(e, "No pudimos guardar la tasa. Intenta de nuevo."));
-    } finally {
-      setPpmCargando(false);
-    }
-  };
 
   const onDescargar = async (tipo: "compra" | "venta") => {
     setDescargando(tipo);
@@ -348,6 +320,7 @@ export default function MiIva() {
       setSyncMsg(
         `Listo: trajimos ${r.compras.n} ${r.compras.n === 1 ? "factura de compra" : "facturas de compra"} y ${r.ventas.n} ${r.ventas.n === 1 ? "factura de venta" : "facturas de venta"} de ${mesLargo(periodo)}.`
       );
+      setEmpresa(await getEmpresa());
       await cargarCierre();
     } catch (e) {
       setSiiError(manejarError(e, "No pudimos traer tus facturas desde el SII. Intenta de nuevo en unos minutos o escríbenos por WhatsApp."));
@@ -395,16 +368,15 @@ export default function MiIva() {
     </p>
   );
 
-  /** Ayuda humana siempre a un toque. */
+  /** Ayuda siempre a un toque: abre a Kiko, el asistente. */
   const ayuda = (
-    <a
-      href={WHATSAPP_AYUDA_URL}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-6 flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-linea px-5 py-3 text-base text-papel hover:border-cancha/60 transition-colors"
+    <button
+      type="button"
+      onClick={abrirAsistente}
+      className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-linea px-5 py-3 text-base text-papel hover:border-cancha/60 transition-colors"
     >
-      ¿Te complicaste? Te ayudamos por WhatsApp
-    </a>
+      🙋 ¿Te complicaste? Pregúntale a Kiko
+    </button>
   );
 
   const mensajeError = (texto: string | null) =>
@@ -423,72 +395,18 @@ export default function MiIva() {
 
   const siiConectado = Boolean(empresa?.siiConfigurado);
 
-  /* ── Tasa PPM: la fija el SII para cada empresa; no asumir el 1% ─────── */
-  const ppmConfirmada = Boolean(empresa?.tasaPpmConfirmada);
-  const tarjetaPpm = (
-    <div
-      className={`mt-6 rounded-xl border px-4 py-4 ${
-        ppmConfirmada ? "border-linea" : "border-multa/50 bg-multa/10"
-      }`}
-    >
-      {!editandoPpm ? (
-        <>
-          <p className="text-base text-papel">
-            {ppmConfirmada ? (
-              <>Tu tasa de PPM: <strong>{tasaPpmTexto(empresa?.tasaPpm ?? 0)}</strong></>
-            ) : (
-              <>
-                ⚠️ Estamos usando una tasa de PPM de <strong>{tasaPpmTexto(empresa?.tasaPpm ?? 0)}</strong>, pero
-                el SII le fija una distinta a cada empresa (las nuevas suelen tener 0,25%). Confírmala
-                para que el total sea exacto.
-              </>
-            )}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setPpmTexto(String(Math.round((empresa?.tasaPpm ?? 0) * 100 * 1000) / 1000).replace(".", ","));
-              setPpmError(null);
-              setEditandoPpm(true);
-            }}
-            className={`${btnSecundario} mt-3`}
-          >
-            {ppmConfirmada ? "Cambiar mi tasa" : "Confirmar mi tasa"}
-          </button>
-        </>
-      ) : (
-        <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarPpm(e)}>
-          <label className="block">
-            <span className={labelTxt}>Tu tasa de PPM (en %)</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={ppmTexto}
-              onChange={(e) => setPpmTexto(e.target.value)}
-              placeholder="Ejemplo: 0,25"
-              className={inputCls}
-            />
-            <p className={ayudaTxt}>
-              Está en tu último F29, en la casilla 115 ("Tasa PPM 1ª categoría"). Si no la
-              encuentras, escríbenos por WhatsApp y la buscamos contigo.
-            </p>
-          </label>
-          {mensajeError(ppmError)}
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button type="submit" disabled={ppmCargando} className={btnPrimario}>
-              {ppmCargando ? "Guardando…" : "Guardar tasa"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditandoPpm(false)}
-              className="min-h-[48px] rounded-full border border-linea px-7 py-3 text-base text-papel hover:border-humo"
-            >
-              Volver
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
+  /* ── Tasa PPM: la fija el SII y la leemos nosotros; el cliente no hace nada ── */
+  const ppmDelSii = empresa?.tasaPpmOrigen === "sii" || empresa?.tasaPpmOrigen === "manual";
+  const tarjetaPpm = ppmDelSii ? (
+    <p className="mt-5 text-sm text-humo">
+      ✓ Tasa de PPM que te fijó el SII: <strong className="text-papel">{tasaPpmTexto(empresa?.tasaPpm ?? 0)}</strong>
+    </p>
+  ) : (
+    <p className="mt-5 rounded-xl border border-multa/50 bg-multa/10 px-4 py-3 text-base text-papel">
+      Este total es <strong>estimado</strong>: todavía estamos leyendo del SII tu tasa de PPM y por
+      ahora usamos {tasaPpmTexto(empresa?.tasaPpm ?? 0)}. No tienes que hacer nada; se ajusta sola
+      cuando el SII nos la entregue.
+    </p>
   );
 
   /* ── Tarjeta: conexión con el SII (paso 3) ───────────────────────────── */
@@ -923,7 +841,7 @@ export default function MiIva() {
                         </div>
                         <div className="flex justify-between gap-4">
                           <dt className="text-humo">
-                            Más el PPM ({tasaPpmTexto(cierre.tasaPpm)} de tus ventas{ppmConfirmada ? "" : ", sin confirmar"})
+                            Más el PPM ({tasaPpmTexto(cierre.tasaPpm)} de tus ventas{ppmDelSii ? "" : ", estimado"})
                             <span className="block text-sm">(adelanto del impuesto a la renta)</span>
                           </dt>
                           <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ppm)}</dd>

@@ -2,11 +2,12 @@
  * Rutas de perfil de empresa + bóveda de credenciales SII.
  * Sub-router Hono (export default) para Cloudflare Pages Functions.
  *
- *   GET  /        -> { nombre, rut, tasaPpm, tasaPpmConfirmada, siiConfigurado } (nunca la clave)
+ *   GET  /        -> { nombre, rut, tasaPpm, tasaPpmOrigen, siiConfigurado } (nunca la clave)
  *                    404 { error: "Sin empresa", empresa: null } si la cuenta
  *                    aún no tiene empresa (NO 401: la sesión sigue válida).
  *   PUT  /sii     -> guarda { rutSii, claveSii } cifrada con AES-256-GCM
- *   PUT  /ppm     -> actualiza la tasa PPM (fracción, 0 a 0.30) y la marca confirmada
+ *   PUT  /ppm     -> fija la tasa PPM a mano (fracción, 0 a 0.30; uso del equipo).
+ *                    Lo normal es que se lea sola del SII (_lib/ppm.ts).
  *
  * Códigos: 401 SOLO cuando falta o es inválido el JWT. Sin empresa → 404 en
  * GET y 400 "Primero agrega tu empresa" en PUT (mismo criterio que
@@ -17,22 +18,11 @@ import { authUser, resolveCompany } from '../_lib/jwt';
 import { q, type Env } from '../_lib/db';
 import { encryptClave } from '../_lib/crypto';
 import { rutValido, formatearRut } from '../_lib/rut';
+import { asegurarColumnasPpm } from '../_lib/ppm';
 
 const TASA_PPM_MAX = 0.3;
 
 const app = new Hono<{ Bindings: Env }>();
-
-/**
- * La tasa PPM la fija el SII para cada empresa (p.ej. 0,25% en empresas nuevas
- * Pro Pyme, 1% en otras). Mientras el cliente no la confirme, la marcamos como
- * "sin confirmar" para no presentar el 1% por defecto como si fuera su tasa.
- */
-let columnaPpmLista = false;
-async function asegurarColumnaPpm(env: Env): Promise<void> {
-  if (columnaPpmLista) return;
-  await q(env, 'ALTER TABLE companies ADD COLUMN IF NOT EXISTS tasa_ppm_confirmada boolean NOT NULL DEFAULT false');
-  columnaPpmLista = true;
-}
 
 type Principal =
   | { ok: true; userId: string; companyId: string | null }
@@ -53,16 +43,16 @@ app.get('/', async (c) => {
   // sesión expirada y cerraba la sesión justo después de registrarse).
   if (!p.companyId) return c.json({ error: 'Sin empresa', empresa: null }, 404);
 
-  await asegurarColumnaPpm(c.env);
+  await asegurarColumnasPpm(c.env);
   const rows = (await q(
     c.env,
-    'SELECT nombre, rut, tasa_ppm, tasa_ppm_confirmada, sii_rut, sii_clave_enc FROM companies WHERE id = $1',
+    'SELECT nombre, rut, tasa_ppm, tasa_ppm_origen, sii_rut, sii_clave_enc FROM companies WHERE id = $1',
     [p.companyId],
   )) as Array<{
     nombre: string | null;
     rut: string | null;
     tasa_ppm: number | string | null;
-    tasa_ppm_confirmada: boolean | null;
+    tasa_ppm_origen: string | null;
     sii_rut: string | null;
     sii_clave_enc: string | null;
   }>;
@@ -75,7 +65,8 @@ app.get('/', async (c) => {
     rut: company.rut,
     // numeric de Postgres llega como string; el contrato del frontend es number.
     tasaPpm: Number(company.tasa_ppm) || 0,
-    tasaPpmConfirmada: Boolean(company.tasa_ppm_confirmada),
+    // 'sii' = leída del F29; 'defecto' = 1% inicial mientras no la leamos; 'manual' = equipo.
+    tasaPpmOrigen: company.tasa_ppm_origen ?? 'defecto',
     siiConfigurado: Boolean(company.sii_rut && company.sii_clave_enc),
   });
 });
@@ -127,8 +118,12 @@ app.put('/ppm', async (c) => {
     return c.json({ error: 'La tasa PPM debe ser un número entre 0 y 0.30' }, 400);
   }
 
-  await asegurarColumnaPpm(c.env);
-  await q(c.env, 'UPDATE companies SET tasa_ppm = $1, tasa_ppm_confirmada = true WHERE id = $2', [tasaPpm, p.companyId]);
+  await asegurarColumnasPpm(c.env);
+  await q(
+    c.env,
+    "UPDATE companies SET tasa_ppm = $1, tasa_ppm_origen = 'manual', tasa_ppm_actualizada = now() WHERE id = $2",
+    [tasaPpm, p.companyId],
+  );
 
   return c.json({ ok: true, tasaPpm });
 });

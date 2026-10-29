@@ -13,6 +13,7 @@ import { Hono, type Context } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { alertaDelDia, alertaSiiNotificacion, hoyEnChile, waLink, type DatosEmpresa } from '../_lib/alerts';
 import { SiiClient } from '../_sii/client';
+import { actualizarTasaPpmDesdeSii } from '../_lib/ppm';
 import { getSiiCreds, recifrarClaves } from '../_lib/crypto';
 import { loadDocsPeriodo, recifrarDocs, eliminarColumnasLegacy } from '../_lib/documents';
 import { ensureAlertsTable, insertAlerta, descifrarAlerta, recifrarAlertas } from '../_lib/alertas';
@@ -108,12 +109,17 @@ cron.post('/generar', async (c) => {
   )) as Array<{ id: string; nombre: string; persona: string | null; telefono: string | null }>;
 
   let siiRevisadas = 0;
+  let tasasPpm = 0;
   for (const emp of conSii) {
     try {
       const creds = await getSiiCreds(c.env, emp.id);
       if (!creds) continue;
       const client = new SiiClient(c.env as { SII_MOCK?: string });
       await client.login(creds.rut, creds.clave);
+      // Con la sesión abierta, refrescamos también la tasa de PPM que fija el SII.
+      if ((await actualizarTasaPpmDesdeSii(c.env, emp.id, client, periodo.replace('-', ''))) !== null) {
+        tasasPpm += 1;
+      }
       const notif = await client.getNotificaciones();
       siiRevisadas += 1;
       if (!notif.hay) continue;
@@ -139,7 +145,7 @@ cron.post('/generar', async (c) => {
     }
   }
 
-  return c.json({ fecha, dia, periodo, empresas: empresas.length, creadas, tipos, siiRevisadas });
+  return c.json({ fecha, dia, periodo, empresas: empresas.length, creadas, tipos, siiRevisadas, tasasPpm });
 });
 
 cron.get('/hoy', async (c) => {
