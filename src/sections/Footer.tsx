@@ -38,7 +38,7 @@ export default function Footer() {
 
         <div className="mt-10 border-t border-linea pt-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <p className="font-mono text-[11px] text-humo">
-            © {new Date().getFullYear()} KickoffIVA · Consultora Kickoff · RUT 78.443.573-9 · Santa Beatriz 111, of. 607-608, Providencia, Santiago
+            © {new Date().getFullYear()} KickoffIVA · Consultora Kickoff · RUT 78.433.573-9 · Santa Beatriz 111, of. 607-608, Providencia, Santiago
           </p>
           <p className="font-mono text-[11px] text-humo">
             Ecosistema Kickoff — Chile · México · Colombia · Perú · Brasil · Paraguay · Argentina
