@@ -6,7 +6,12 @@ import { WHATSAPP_URL } from "../config";
 export default function StickyCta() {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const onScroll = () => setVisible(window.scrollY > window.innerHeight * 0.8);
+    // Se oculta sobre "Mi IVA": ahí la persona está llenando datos y la barra le tapa el formulario.
+    const onScroll = () => {
+      const miIva = document.getElementById("mi-iva")?.getBoundingClientRect();
+      const sobreMiIva = miIva ? miIva.top < window.innerHeight && miIva.bottom > 0 : false;
+      setVisible(window.scrollY > window.innerHeight * 0.8 && !sobreMiIva);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

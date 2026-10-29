@@ -32,6 +32,8 @@ export interface RegisterInput {
   nombre: string;
   /** WhatsApp de contacto para las alertas mensuales (opcional). */
   telefono?: string;
+  /** Token de Cloudflare Turnstile (solo si el captcha está activo). */
+  turnstileToken?: string;
   /** Empresa inicial opcional (también se puede agregar después). */
   nombreEmpresa?: string;
   rutEmpresa?: string;
@@ -65,6 +67,8 @@ export interface Empresa {
   nombre: string;
   rut: string;
   tasaPpm: number;
+  /** De dónde salió la tasa: 'sii' (leída del F29), 'defecto' (1% mientras no la leemos), 'manual' (equipo). */
+  tasaPpmOrigen: "sii" | "defecto" | "manual";
   siiConfigurado: boolean;
 }
 
@@ -72,6 +76,8 @@ export interface ResultadoSync {
   periodo: string;
   compras: { n: number; errores?: number };
   ventas: { n: number; errores?: number };
+  /** Tasa PPM leída del SII en esta sincronización (fracción), o null si no se pudo. */
+  tasaPpm?: number | null;
 }
 
 export class ApiError extends Error {
@@ -212,14 +218,14 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
   return data;
 }
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(email: string, password: string, turnstileToken?: string): Promise<AuthResponse> {
   // POST /api/auth/login → {token, user} | 401 credenciales inválidas
   const data = await apiJson<AuthResponse>(
     "/api/auth/login",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(turnstileToken ? { turnstileToken } : {}) }),
     },
     { auth: false }
   );
@@ -279,7 +285,7 @@ export async function getEmpresa(): Promise<Empresa | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
   const data = (await res.json()) as Empresa;
-  return { ...data, tasaPpm: Number(data.tasaPpm) || 0 };
+  return { ...data, tasaPpm: Number(data.tasaPpm) || 0, tasaPpmOrigen: data.tasaPpmOrigen ?? "defecto" };
 }
 
 export async function guardarCredencialesSii(

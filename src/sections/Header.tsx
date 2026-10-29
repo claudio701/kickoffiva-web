@@ -50,13 +50,21 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Clientes que vuelven: "Entrar" siempre visible, sin buscar en el menú */}
+          <a
+            href="#mi-iva"
+            className="rounded-full border border-linea px-4 py-2.5 text-sm font-semibold text-papel hover:border-humo transition-colors"
+          >
+            Entrar
+          </a>
           <a
             href={WHATSAPP_URL}
             target="_blank"
             rel="noreferrer"
             className="rounded-full bg-cancha px-4 sm:px-5 py-2.5 text-sm font-semibold text-tinta hover:bg-cancha-dim transition-colors"
           >
-            Hablemos →
+            <span className="hidden sm:inline">Hablemos →</span>
+            <span className="sm:hidden">WhatsApp</span>
           </a>
           <button
             type="button"

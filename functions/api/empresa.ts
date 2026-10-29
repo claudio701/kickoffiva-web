@@ -2,11 +2,12 @@
  * Rutas de perfil de empresa + bóveda de credenciales SII.
  * Sub-router Hono (export default) para Cloudflare Pages Functions.
  *
- *   GET  /        -> { nombre, rut, tasaPpm, siiConfigurado } (nunca la clave)
+ *   GET  /        -> { nombre, rut, tasaPpm, tasaPpmOrigen, siiConfigurado } (nunca la clave)
  *                    404 { error: "Sin empresa", empresa: null } si la cuenta
  *                    aún no tiene empresa (NO 401: la sesión sigue válida).
  *   PUT  /sii     -> guarda { rutSii, claveSii } cifrada con AES-256-GCM
- *   PUT  /ppm     -> actualiza la tasa PPM (0 a 0.30)
+ *   PUT  /ppm     -> fija la tasa PPM a mano (fracción, 0 a 0.30; uso del equipo).
+ *                    Lo normal es que se lea sola del SII (_lib/ppm.ts).
  *
  * Códigos: 401 SOLO cuando falta o es inválido el JWT. Sin empresa → 404 en
  * GET y 400 "Primero agrega tu empresa" en PUT (mismo criterio que
@@ -17,6 +18,7 @@ import { authUser, resolveCompany } from '../_lib/jwt';
 import { q, type Env } from '../_lib/db';
 import { encryptClave } from '../_lib/crypto';
 import { rutValido, formatearRut } from '../_lib/rut';
+import { asegurarColumnasPpm } from '../_lib/ppm';
 
 const TASA_PPM_MAX = 0.3;
 
@@ -41,14 +43,16 @@ app.get('/', async (c) => {
   // sesión expirada y cerraba la sesión justo después de registrarse).
   if (!p.companyId) return c.json({ error: 'Sin empresa', empresa: null }, 404);
 
+  await asegurarColumnasPpm(c.env);
   const rows = (await q(
     c.env,
-    'SELECT nombre, rut, tasa_ppm, sii_rut, sii_clave_enc FROM companies WHERE id = $1',
+    'SELECT nombre, rut, tasa_ppm, tasa_ppm_origen, sii_rut, sii_clave_enc FROM companies WHERE id = $1',
     [p.companyId],
   )) as Array<{
     nombre: string | null;
     rut: string | null;
     tasa_ppm: number | string | null;
+    tasa_ppm_origen: string | null;
     sii_rut: string | null;
     sii_clave_enc: string | null;
   }>;
@@ -61,6 +65,8 @@ app.get('/', async (c) => {
     rut: company.rut,
     // numeric de Postgres llega como string; el contrato del frontend es number.
     tasaPpm: Number(company.tasa_ppm) || 0,
+    // 'sii' = leída del F29; 'defecto' = 1% inicial mientras no la leamos; 'manual' = equipo.
+    tasaPpmOrigen: company.tasa_ppm_origen ?? 'defecto',
     siiConfigurado: Boolean(company.sii_rut && company.sii_clave_enc),
   });
 });
@@ -85,7 +91,7 @@ app.put('/sii', async (c) => {
     return c.json({ error: 'La clave debe tener al menos 4 caracteres' }, 400);
   }
 
-  const claveEnc = await encryptClave(c.env, claveSii);
+  const claveEnc = await encryptClave(c.env, p.companyId, claveSii);
   await q(
     c.env,
     'UPDATE companies SET sii_rut = $1, sii_clave_enc = $2 WHERE id = $3',
@@ -112,7 +118,12 @@ app.put('/ppm', async (c) => {
     return c.json({ error: 'La tasa PPM debe ser un número entre 0 y 0.30' }, 400);
   }
 
-  await q(c.env, 'UPDATE companies SET tasa_ppm = $1 WHERE id = $2', [tasaPpm, p.companyId]);
+  await asegurarColumnasPpm(c.env);
+  await q(
+    c.env,
+    "UPDATE companies SET tasa_ppm = $1, tasa_ppm_origen = 'manual', tasa_ppm_actualizada = now() WHERE id = $2",
+    [tasaPpm, p.companyId],
+  );
 
   return c.json({ ok: true, tasaPpm });
 });

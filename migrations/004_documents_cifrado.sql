@@ -7,6 +7,8 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS datos_enc text;   -- "v1." + base
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_hash  text;   -- HMAC-SHA256(empresa|tipo|folio|RUT emisor)
 CREATE UNIQUE INDEX IF NOT EXISTS documents_company_hash_uq ON documents (company_id, doc_hash);
 
--- Cuando pendientes = 0 (todas las filas migradas), las columnas en claro se pueden eliminar:
+-- El job POST /api/cron/recifrar elimina solo las columnas en claro cuando ya no queda
+-- ninguna fila que dependa de ellas (functions/_lib/documents.ts → eliminarColumnasLegacy).
+-- Equivalente manual, SOLO si SELECT count(*) FROM documents WHERE datos_enc IS NULL = 0:
 -- ALTER TABLE documents DROP COLUMN fecha, DROP COLUMN rut_emisor, DROP COLUMN folio,
 --   DROP COLUMN razon_social, DROP COLUMN neto, DROP COLUMN iva, DROP COLUMN total;

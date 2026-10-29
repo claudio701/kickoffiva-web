@@ -41,6 +41,7 @@
 // (type-stripping), así el cliente también se puede probar local sin compilar.
 import { parseRcvCsv } from './parse.logic.mjs';
 import { CSV_COMPRAS, CSV_VENTAS } from './fixtures.ts';
+import { extraerTasaPpm as _extraerTasaPpm } from './f29.logic.mjs';
 
 export class CredencialesInvalidas extends Error {
   constructor(message = 'El SII rechazó las credenciales') {
@@ -75,6 +76,22 @@ const RCV_DOWNLOAD_URL = `${RCV_BASE}/consdcvinternetui/sdiDownload`;
  *  OJO: el SII puede migrar esta URL o cambiar el markup sin aviso —
  *  getNotificaciones() es best-effort y falla en silencio controlado. */
 const NOTIF_URL = 'https://www4.sii.cl/bolcoreinternetui/';
+
+/** Propuesta de F29 que arma el SII (facade JSON del SPA propuestaf29ui). De ahí se lee
+ *  la tasa de PPM que el SII le fijó al contribuyente: código 115, en % (p.ej. "0.25").
+ *  Contrato observado en vivo y documentado por el proyecto MIT albertomarturelo/sii
+ *  (docs/sii-contract/f29.md, portal/f29.ts): body { rutContribuyente, dv, formCodigo:"2",
+ *  mes, anno }, conversationId = cookie TOKEN, errores en metaData.errors.
+ *  OJO: el F29 se consulta como el titular de la sesión (no como empresa representada). */
+const F29_PROPUESTA_URL =
+  'https://www4.sii.cl/propuestaf29ui/services/data/facadeAdapterService/getDeclaracionConCondicionesYTipoPropuesta';
+const F29_PROPUESTA_NS =
+  'cl.sii.sdi.lob.iva.propuestaf29.data.api.interfaces.FacadeAdapterService/getDeclaracionConCondicionesYTipoPropuesta';
+/** Tasa que devuelve el modo mock (0,25%, típica de empresa nueva Pro Pyme). */
+const MOCK_TASA_PPM = 0.0025;
+
+/** Lee el código 115 de la propuesta F29 (ver f29.logic.mjs). */
+export const extraerTasaPpm: (json: unknown) => number | null = _extraerTasaPpm;
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
@@ -114,6 +131,10 @@ class CookieJar {
 
   get size(): number {
     return this.jar.size;
+  }
+
+  get(nombre: string): string | null {
+    return this.jar.get(nombre) ?? null;
   }
 }
 
@@ -291,6 +312,87 @@ export class SiiClient {
     return { hay: sinLeer, titulos };
   }
 
+  /**
+   * Tasa de PPM que el SII le fijó al contribuyente (código 115 de la propuesta de F29),
+   * como fracción (0,25% → 0.0025). Prueba el período pedido y, si el SII no tiene
+   * propuesta para ese mes, el anterior. Devuelve null si no la encuentra.
+   * @param periodo "AAAAMM"
+   * @throws {SiiNoDisponible | CredencialesInvalidas}
+   */
+  async getTasaPpm(periodo: string): Promise<number | null> {
+    if (this.mock) return MOCK_TASA_PPM;
+    if (!this.rutNormalizado) {
+      throw new CredencialesInvalidas('Se requiere login() antes de consultar el F29');
+    }
+    if (!/^\d{6}$/.test(periodo)) {
+      throw new SiiNoDisponible(`Período inválido (se espera AAAAMM): "${periodo}"`);
+    }
+    let anno = Number(periodo.slice(0, 4));
+    let mes = Number(periodo.slice(4));
+    for (let intento = 0; intento < 2; intento++) {
+      const tasa = await this.tasaPpmDePropuesta(anno, mes);
+      if (tasa !== null) return tasa;
+      mes -= 1;
+      if (mes === 0) {
+        mes = 12;
+        anno -= 1;
+      }
+    }
+    return null;
+  }
+
+  private async tasaPpmDePropuesta(anno: number, mes: number): Promise<number | null> {
+    const [cuerpo, dv] = (this.rutNormalizado as string).split('-');
+    let res: Response;
+    try {
+      res = await fetch(F29_PROPUESTA_URL, {
+        method: 'POST',
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+          Origin: RCV_BASE,
+          Referer: `${RCV_BASE}/propuestaf29ui/`,
+          Cookie: this.jar.header(),
+        },
+        body: JSON.stringify({
+          metaData: {
+            namespace: F29_PROPUESTA_NS,
+            conversationId: this.jar.get('TOKEN') ?? '',
+            transactionId: crypto.randomUUID(),
+          },
+          data: {
+            rutContribuyente: cuerpo,
+            dv,
+            formCodigo: '2',
+            mes: String(mes).padStart(2, '0'),
+            anno: String(anno),
+          },
+        }),
+        redirect: 'follow',
+        signal: AbortSignal.timeout(SII_TIMEOUT_MS),
+      });
+    } catch (e) {
+      throw new SiiNoDisponible(`No se pudo consultar el F29: ${(e as Error).message}`);
+    }
+    this.jar.absorb(res);
+    if (res.status === 401 || res.status === 403) {
+      throw new CredencialesInvalidas('La sesión del SII expiró al consultar el F29');
+    }
+    if (!res.ok) throw new SiiNoDisponible(`Propuesta F29 respondió HTTP ${res.status}`);
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch {
+      throw new SiiNoDisponible('La propuesta F29 no devolvió JSON (sesión caída o WAF)');
+    }
+    try {
+      return extraerTasaPpm(json);
+    } catch (e) {
+      throw new SiiNoDisponible((e as Error).message);
+    }
+  }
+
   private async descargarLibro(tipo: 'compra' | 'venta', periodo: string) {
     if (!this.rutNormalizado) {
       throw new CredencialesInvalidas('Se requiere login() antes de descargar');
@@ -338,3 +440,4 @@ export class SiiClient {
     return parseRcvCsv(texto, tipo);
   }
 }
+

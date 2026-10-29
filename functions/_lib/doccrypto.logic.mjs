@@ -12,8 +12,14 @@
  * Cloudflare protege clave SII y documentos, y las llaves derivadas son
  * independientes entre sí.
  *
- * Formato de `datos_enc`: "v1." + base64(iv(12) ‖ ciphertext ‖ tag(16)).
+ * Formatos de `datos_enc`:
+ *   - "v2.<kid>.…" (actual): cifrado con el llavero (keyring.logic.mjs), amarrado a la
+ *     empresa por AAD. Es lo único que se escribe.
+ *   - "v1." + base64(iv(12) ‖ ciphertext ‖ tag(16)) (heredado): solo se lee, hasta que el
+ *     job de recifrado lo pase a v2.
  */
+
+import { cifrar, descifrar, estaCifrado } from './keyring.logic.mjs';
 
 const subtle = globalThis.crypto.subtle;
 const te = new TextEncoder();
@@ -80,7 +86,7 @@ export function normalizarDoc(d) {
   };
 }
 
-/** Cifra un documento normalizado → string para la columna datos_enc. */
+/** [Heredado v1, solo para tests y lectura] Cifra un documento → "v1.…". */
 export async function cifrarDoc(masterHex, doc) {
   const { enc } = await derivarLlaves(masterHex);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -124,4 +130,41 @@ export function docDesdeLegacy(row) {
     iva: row.iva,
     total: row.total,
   });
+}
+
+// ---------------------------------------------------------------------------
+// v2: llavero con rotación + AAD por empresa
+// ---------------------------------------------------------------------------
+
+const PROPOSITO_DOC = 'documento';
+
+/** Cifra un documento normalizado con la llave actual → "v2.<kid>.…". */
+export async function cifrarDocV2(llavero, companyId, doc) {
+  return cifrar(llavero, PROPOSITO_DOC, companyId, JSON.stringify(normalizarDoc(doc)));
+}
+
+/** Descifra datos_enc en cualquier formato soportado (v2 o v1 heredado). */
+export async function descifrarDocAlguno(llavero, companyId, blob) {
+  if (estaCifrado(blob)) {
+    return normalizarDoc(JSON.parse(await descifrar(llavero, PROPOSITO_DOC, companyId, blob)));
+  }
+  if (typeof blob === 'string' && blob.startsWith('v1.')) {
+    for (const l of llavero.llaves) {
+      try {
+        return await descifrarDoc(l.hex, blob);
+      } catch {
+        /* siguiente llave */
+      }
+    }
+    throw new Error('Documento v1 que no descifra con ninguna llave del llavero');
+  }
+  throw new Error('Documento cifrado con formato desconocido');
+}
+
+/**
+ * Índice ciego con cada llave del llavero. [0] es el de la llave actual (el que se
+ * guarda); el resto sirve para detectar duplicados de filas aún no recifradas.
+ */
+export async function hashesDoc(llavero, companyId, tipo, doc) {
+  return Promise.all(llavero.llaves.map((l) => hashDoc(l.hex, companyId, tipo, doc)));
 }

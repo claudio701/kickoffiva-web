@@ -4,6 +4,18 @@ import { hashPassword, verifyPassword } from '../_lib/passwords';
 import { signToken, authUser } from '../_lib/jwt';
 import { rutValido, formatearRut } from '../_lib/rut';
 import { texto, email as emailNorm } from '../_lib/sanitize';
+import {
+  LIMITES,
+  ipDe,
+  claveIntento,
+  excedido,
+  anotar,
+  limpiar,
+  turnstileOk,
+  MSG_DEMASIADOS,
+  MSG_VERIFICACION,
+  type LimitesEnv,
+} from '../_lib/limites';
 
 /** users table row shape. */
 export interface UserRow {
@@ -45,7 +57,7 @@ function toPublicUser(user: UserRow, company: CompanyRow | undefined): PublicUse
   };
 }
 
-const auth = new Hono<{ Bindings: Env }>();
+const auth = new Hono<{ Bindings: Env & LimitesEnv }>();
 
 /** POST /register — crea la cuenta de la PERSONA; la empresa se puede
  *  agregar al registrar (compat) o después vía POST /api/empresas. */
@@ -57,7 +69,18 @@ auth.post('/register', async (c) => {
     telefono?: string;
     nombreEmpresa?: string;
     rutEmpresa?: string;
+    turnstileToken?: string;
   };
+
+  // Anti-bots: tope de cuentas por IP y captcha invisible (si está configurado).
+  const ip = ipDe(c);
+  const claveIp = await claveIntento('registro-ip', ip || 'sin-ip');
+  if (await excedido(c.env, claveIp, LIMITES.registroPorIp.max, LIMITES.registroPorIp.minutos)) {
+    return c.json({ error: MSG_DEMASIADOS }, 429);
+  }
+  if (!(await turnstileOk(c.env, body.turnstileToken, ip))) {
+    return c.json({ error: MSG_VERIFICACION }, 400);
+  }
 
   const email = emailNorm(body.email);
   const password = body.password;
@@ -107,6 +130,8 @@ auth.post('/register', async (c) => {
     throw err;
   }
 
+  await anotar(c.env, claveIp);
+
   let companyId: string | null = null;
   if (nombreEmpresa && rutEmpresa) {
     companyId = crypto.randomUUID();
@@ -138,12 +163,27 @@ auth.post('/login', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     email?: string;
     password?: string;
+    turnstileToken?: string;
   };
   const email = emailNorm(body.email);
   const password = body.password;
 
   if (!email || typeof password !== 'string' || !password) {
     return c.json({ error: 'Credenciales inválidas' }, 401);
+  }
+
+  // Anti fuerza bruta: tope de fallas por correo y por IP (15 min).
+  const ip = ipDe(c);
+  const claveCorreo = await claveIntento('login-correo', email);
+  const claveIp = await claveIntento('login-ip', ip || 'sin-ip');
+  if (
+    (await excedido(c.env, claveCorreo, LIMITES.loginPorCorreo.max, LIMITES.loginPorCorreo.minutos)) ||
+    (await excedido(c.env, claveIp, LIMITES.loginPorIp.max, LIMITES.loginPorIp.minutos))
+  ) {
+    return c.json({ error: MSG_DEMASIADOS }, 429);
+  }
+  if (!(await turnstileOk(c.env, body.turnstileToken, ip))) {
+    return c.json({ error: MSG_VERIFICACION }, 400);
   }
 
   const users = await q<UserRow>(
@@ -153,8 +193,10 @@ auth.post('/login', async (c) => {
   );
   const user = users[0];
   if (!user || !(await verifyPassword(password, user.password_hash))) {
+    await anotar(c.env, claveCorreo, claveIp);
     return c.json({ error: 'Credenciales inválidas' }, 401);
   }
+  await limpiar(c.env, claveCorreo);
 
   const companies = await q<CompanyRow>(
     c.env,
