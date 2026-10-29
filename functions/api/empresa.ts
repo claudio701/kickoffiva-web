@@ -85,7 +85,7 @@ app.put('/sii', async (c) => {
     return c.json({ error: 'La clave debe tener al menos 4 caracteres' }, 400);
   }
 
-  const claveEnc = await encryptClave(c.env, claveSii);
+  const claveEnc = await encryptClave(c.env, p.companyId, claveSii);
   await q(
     c.env,
     'UPDATE companies SET sii_rut = $1, sii_clave_enc = $2 WHERE id = $3',

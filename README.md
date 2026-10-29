@@ -39,11 +39,43 @@ node scripts/verify-api.mjs https://api.kickoffiva.cl
 |---|---|
 | `DATABASE_URL` | Connection string de Neon (`postgresql://...`) — secreto |
 | `JWT_SECRET` | Firma de los tokens de sesión (30 días) — secreto |
-| `SII_ENC_KEY` | 64 hex (32 bytes): cifrado AES-256-GCM de la clave SII — secreto |
+| `SII_ENC_KEY` | 64 hex (32 bytes): llave maestra del cifrado AES-256-GCM de todo lo que viene del SII — secreto |
+| `SII_ENC_KEY_PREVIOUS` | Llaves anteriores (64 hex, separadas por coma), solo durante una rotación — secreto, opcional |
 | `CRON_SECRET` | Protege `/api/cron/*` (header `x-cron-secret`) — secreto, opcional |
 | `SII_MOCK` | `1` = SII simulado; ausente/`0` = SII real |
 
 Nunca van en el código ni en Git.
+
+## Cifrado de los datos del SII
+
+Todo lo que viene del SII se cifra **en la aplicación** con AES-256-GCM antes de llegar a Neon
+(`functions/_lib/keyring.logic.mjs`). La base nunca ve la llave; un respaldo o robo de la base
+solo contiene texto cifrado.
+
+| Dato | Dónde | Cómo |
+|---|---|---|
+| Clave tributaria SII | `companies.sii_clave_enc` | `v2.<kid>.…`, amarrada a la empresa |
+| Documentos del RCV (RUT, razón social, folio, fecha, montos) | `documents.datos_enc` | `v2.<kid>.…`, amarrado a la empresa; duplicados vía índice ciego HMAC (`doc_hash`) |
+| Mensaje y teléfono de las alertas (llevan montos) | `alerts.mensaje`, `alerts.telefono` | `v2.<kid>.…`, amarrado a la empresa |
+
+"Amarrado a la empresa" (AAD): un valor cifrado copiado a otra fila u otra empresa no descifra.
+Cada tipo de dato usa su propia subllave (HKDF) derivada de `SII_ENC_KEY`.
+
+El job `POST /api/cron/recifrar` (lo llama el Worker del cron a diario) cifra con la llave actual
+todo lo que no lo esté (filas antiguas en claro, formato v1, o llave anterior) y, cuando ya no queda
+ningún documento en claro, **borra las columnas en claro** de `documents`. Es idempotente.
+
+### Rotar la llave
+
+1. Generar una llave nueva: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+2. En Cloudflare Pages → Settings → Environment variables: `SII_ENC_KEY_PREVIOUS` = llave actual,
+   `SII_ENC_KEY` = llave nueva. Desplegar (`DEPLOY.cmd`).
+3. Correr el job hasta `pendientes: 0` y `errores: 0` (o esperar el cron diario):
+   `curl -X POST -H "x-cron-secret: $CRON_SECRET" https://api.kickoffiva.cl/api/cron/recifrar`
+4. Borrar `SII_ENC_KEY_PREVIOUS` y volver a desplegar.
+
+**Nunca** borrar una llave mientras queden datos cifrados con ella: esos datos quedan ilegibles para siempre.
+Guardar una copia de la llave actual fuera de Cloudflare (gestor de contraseñas del equipo).
 
 ## Alarmas (cron diario)
 

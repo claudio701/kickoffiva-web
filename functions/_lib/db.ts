@@ -5,6 +5,8 @@ export interface Env {
   DATABASE_URL: string;
   JWT_SECRET: string;
   SII_ENC_KEY: string;
+  /** Llaves anteriores (hex, separadas por coma) durante una rotación. Opcional. */
+  SII_ENC_KEY_PREVIOUS?: string;
 }
 
 /** Neon serverless sql tagged-template client type. */

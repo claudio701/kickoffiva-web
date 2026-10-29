@@ -1,100 +1,61 @@
 /**
- * Bóveda de credenciales SII — AES-256-GCM con WebCrypto (Workers).
+ * Bóveda de credenciales SII — AES-256-GCM con el llavero (keyring.logic.mjs).
  *
- * La clave de cifrado viene de env.SII_ENC_KEY como hex de 64 caracteres
- * (32 bytes). El valor almacenado es base64(iv ‖ ciphertext ‖ tag), con
- * IV aleatorio de 12 bytes por cifrado. El tag GCM (16 bytes) lo anexa
- * WebCrypto al final del ciphertext, por lo que el layout es exactamente
- * iv(12) ‖ cipher(n) ‖ tag(16).
+ * La clave tributaria se guarda en companies.sii_clave_enc como
+ * "v2.<kid>.<base64>", cifrada con la subllave del propósito "sii-clave" y
+ * amarrada (AAD) al id de la empresa: copiada a otra empresa no descifra.
+ *
+ * Valores heredados (base64 sin prefijo, cifrados con la llave maestra directa)
+ * se siguen leyendo hasta que el job de recifrado los pase a v2.
  *
  * PRECAUCIÓN: la clave SII (clave tributaria) nunca se registra en logs
  * ni se expone en respuestas/errores.
  */
-import { q } from './db';
+import { q, type Env } from './db';
+import {
+  llaveroDesdeEnv as _llaveroDesdeEnv,
+  cifrar as _cifrar,
+  descifrar as _descifrar,
+  estaCifrado as _estaCifrado,
+  descifrarClaveLegacy as _descifrarClaveLegacy,
+} from './keyring.logic.mjs';
 
 /** Entorno mínimo que necesita este módulo. */
 export interface CryptoEnv {
   SII_ENC_KEY: string;
+  SII_ENC_KEY_PREVIOUS?: string;
 }
 
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
+export interface Llave {
+  hex: string;
+  kid: string;
+}
+export interface Llavero {
+  actual: Llave;
+  llaves: readonly Llave[];
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
+export const llaveroDesdeEnv: (env: CryptoEnv) => Promise<Llavero> = _llaveroDesdeEnv;
+const cifrar: (l: Llavero, proposito: string, contexto: string, texto: string) => Promise<string> = _cifrar;
+const descifrar: (l: Llavero, proposito: string, contexto: string, blob: string) => Promise<string> = _descifrar;
+const estaCifrado: (v: unknown) => boolean = _estaCifrado;
+const descifrarClaveLegacy: (l: Llavero, stored: string) => Promise<string> = _descifrarClaveLegacy;
 
-function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
+const PROPOSITO_CLAVE = 'sii-clave';
 
-let cachedKey: Promise<CryptoKey> | null = null;
-
-function getKey(env: CryptoEnv): Promise<CryptoKey> {
-  if (!cachedKey) {
-    const hex = env.SII_ENC_KEY;
-    if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) {
-      // No incluir el valor en el error: podría terminar en logs.
-      throw new Error('SII_ENC_KEY inválida: se espera hex de 64 caracteres');
-    }
-    cachedKey = crypto.subtle.importKey(
-      'raw',
-      hexToBytes(hex),
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt'],
-    );
-  }
-  return cachedKey;
+/** Cifra la clave SII de una empresa → "v2.<kid>.<base64>". */
+export async function encryptClave(env: CryptoEnv, companyId: string, plaintext: string): Promise<string> {
+  return cifrar(await llaveroDesdeEnv(env), PROPOSITO_CLAVE, companyId, plaintext);
 }
 
 /**
- * Cifra la clave SII. Devuelve base64(iv ‖ cipher ‖ tag).
+ * Descifra la clave SII de una empresa (v2 o formato heredado). Lanza si el
+ * valor fue alterado, pertenece a otra empresa o su llave no está en el llavero.
  */
-export async function encryptClave(env: CryptoEnv, plaintext: string): Promise<string> {
-  const key = await getKey(env);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cipherBuf = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(plaintext),
-  );
-  const cipher = new Uint8Array(cipherBuf);
-  const out = new Uint8Array(iv.length + cipher.length);
-  out.set(iv, 0);
-  out.set(cipher, iv.length);
-  return bytesToBase64(out);
-}
-
-/**
- * Descifra un valor producido por encryptClave. Lanza si el formato o el
- * tag de autenticación no son válidos.
- */
-export async function decryptClave(env: CryptoEnv, stored: string): Promise<string> {
-  const key = await getKey(env);
-  const data = base64ToBytes(stored);
-  if (data.length < 12 + 16 + 1) {
-    throw new Error('Credencial SII almacenada con formato inválido');
-  }
-  const iv = data.slice(0, 12);
-  const cipher = data.slice(12);
-  const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
-  return new TextDecoder().decode(plainBuf);
+export async function decryptClave(env: CryptoEnv, companyId: string, stored: string): Promise<string> {
+  const llavero = await llaveroDesdeEnv(env);
+  if (estaCifrado(stored)) return descifrar(llavero, PROPOSITO_CLAVE, companyId, stored);
+  return descifrarClaveLegacy(llavero, stored);
 }
 
 export interface SiiCreds {
@@ -117,6 +78,49 @@ export async function getSiiCreds(
   )) as Array<{ sii_rut: string | null; sii_clave_enc: string | null }>;
   const row = rows?.[0];
   if (!row || !row.sii_rut || !row.sii_clave_enc) return null;
-  const clave = await decryptClave(env, row.sii_clave_enc);
+  const clave = await decryptClave(env, companyId, row.sii_clave_enc);
   return { rut: row.sii_rut, clave };
+}
+
+/**
+ * Recifra con la llave actual las claves SII que no lo estén (formato heredado o
+ * llave anterior). Idempotente; una clave que no descifra se cuenta como error y
+ * no se toca.
+ */
+export async function recifrarClaves(
+  env: Env,
+  limite = 500,
+): Promise<{ recifradas: number; errores: number; pendientes: number }> {
+  const llavero = await llaveroDesdeEnv(env);
+  const prefijo = `v2.${llavero.actual.kid}.%`;
+  const rows = (await q(
+    env,
+    `SELECT id, sii_clave_enc FROM companies
+      WHERE sii_clave_enc IS NOT NULL AND sii_clave_enc NOT LIKE $1
+      ORDER BY id LIMIT $2`,
+    [prefijo, limite],
+  )) as Array<{ id: string; sii_clave_enc: string }>;
+  let recifradas = 0;
+  let errores = 0;
+  for (const r of rows) {
+    try {
+      const clave = await decryptClave(env, r.id, r.sii_clave_enc);
+      const nueva = await encryptClave(env, r.id, clave);
+      // Solo si nadie la cambió entre medio (el usuario pudo guardar una clave nueva).
+      await q(env, `UPDATE companies SET sii_clave_enc = $2 WHERE id = $1 AND sii_clave_enc = $3`, [
+        r.id,
+        nueva,
+        r.sii_clave_enc,
+      ]);
+      recifradas += 1;
+    } catch {
+      errores += 1;
+    }
+  }
+  const rest = (await q(
+    env,
+    `SELECT count(*)::int AS n FROM companies WHERE sii_clave_enc IS NOT NULL AND sii_clave_enc NOT LIKE $1`,
+    [prefijo],
+  )) as { n: number }[];
+  return { recifradas, errores, pendientes: Number(rest[0]?.n ?? 0) };
 }
