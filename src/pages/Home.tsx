@@ -25,7 +25,16 @@ export default function Home() {
   useEffect(() => {
     if (window.location.hash) {
       const ir = () => {
-        const el = document.querySelector(window.location.hash);
+        // El hash puede traer parámetros de campaña (#plan?utm_source=mail):
+        // querySelector("#plan?utm…") lanza SyntaxError y dejaba la página en
+        // blanco. Se toma solo el id y se busca con getElementById.
+        let id = window.location.hash.slice(1).split(/[?&]/)[0] ?? "";
+        try {
+          id = decodeURIComponent(id);
+        } catch {
+          /* % mal formado: se usa tal cual */
+        }
+        const el = id ? document.getElementById(id) : null;
         if (el) el.scrollIntoView({ behavior: "auto", block: "start" });
       };
       ir();

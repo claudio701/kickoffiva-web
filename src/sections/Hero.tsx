@@ -24,7 +24,7 @@ export default function Hero() {
 
         <p className="mt-6 max-w-2xl text-base sm:text-lg text-humo leading-relaxed">
           Tu IVA calculado el <strong className="text-papel font-semibold">día 28 de cada mes</strong> —
-          diez días antes de que el SII se despierte. Y cuando te peguen igual
+          antes de que el SII publique su propuesta. Y cuando te peguen igual
           (multas, anotaciones, vulneraciones),{" "}
           <strong className="text-papel font-semibold">las resolvemos nosotros.</strong>{" "}
           Rápido y a precio justo.
