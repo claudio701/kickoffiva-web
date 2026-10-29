@@ -218,6 +218,28 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
   return data;
 }
 
+/** Pide el link para crear contraseña nueva (llega por correo). */
+export async function recuperarClave(identificador: string): Promise<{ ok: true; mensaje: string }> {
+  return apiJson("/api/auth/recuperar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identificador }),
+  }, { auth: false });
+}
+
+/** Fija la contraseña nueva con el token del correo y deja la sesión iniciada. */
+export async function restablecerClave(token: string, password: string): Promise<AuthResponse> {
+  const data = await apiJson<AuthResponse>("/api/auth/restablecer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  }, { auth: false });
+  clearToken();
+  setToken(data.token);
+  setStoredUser(data.user);
+  return data;
+}
+
 /** identificador = RUT del negocio o correo. */
 export async function login(identificador: string, password: string, turnstileToken?: string): Promise<AuthResponse> {
   // POST /api/auth/login → {token, user} | 401 credenciales inválidas

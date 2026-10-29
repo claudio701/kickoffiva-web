@@ -13,6 +13,8 @@ import {
   guardarCredencialesSii,
   login,
   logout,
+  recuperarClave,
+  restablecerClave,
   register,
   setActiveCompanyId,
   sincronizarSii,
@@ -73,6 +75,18 @@ export default function MiIva() {
   // La mayoría de quienes llegan aquí son nuevos: si nunca entró en este equipo, "Soy nuevo".
   const [modo, setModo] = useState<Modo>(() => (getMe() ? "login" : "register"));
   const [verPassword, setVerPassword] = useState(false);
+  // Recuperar contraseña: "recuperar" pide el link; "restablecer" llega desde el link del correo.
+  const [tokenRestablecer] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("restablecer");
+    } catch {
+      return null;
+    }
+  });
+  const [vista, setVista] = useState<"normal" | "recuperar" | "restablecer">(() =>
+    tokenRestablecer ? "restablecer" : "normal"
+  );
+  const [recuperarMsg, setRecuperarMsg] = useState<string | null>(null);
   const [verClaveSii, setVerClaveSii] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -270,9 +284,16 @@ export default function MiIva() {
       recienEntro.current = true;
       setAutenticado(true);
     } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && modo === "register") {
+        // Ya tiene cuenta: lo pasamos a "Ya tengo cuenta" con su correo escrito.
+        setModo("login");
+        setPassword("");
+        setAuthError(`${e.message} Si no recuerdas la contraseña, toca "¿Olvidaste tu contraseña?".`);
+        return;
+      }
       setAuthError(
         e instanceof ApiError && e.status === 401 && modo === "login"
-          ? "El RUT o correo, o la contraseña, no coinciden. Revisa e intenta de nuevo."
+          ? "El RUT o correo, o la contraseña, no coinciden. Si no la recuerdas, toca \"¿Olvidaste tu contraseña?\"."
           : e instanceof ApiError && e.status !== 401
           ? e.message
           : manejarError(
@@ -357,6 +378,53 @@ export default function MiIva() {
     setEmpresaActiva(null);
     setEmail("");
     setModo("login");
+  };
+
+  const onRecuperar = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setAuthError(null);
+    setRecuperarMsg(null);
+    if (!email.trim()) {
+      setAuthError("Escribe tu RUT o tu correo.");
+      return;
+    }
+    setAuthCargando(true);
+    try {
+      const r = await recuperarClave(email.trim());
+      setRecuperarMsg(r.mensaje);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "No pudimos enviar el correo. Intenta de nuevo.");
+    } finally {
+      setAuthCargando(false);
+    }
+  };
+
+  const onRestablecer = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setAuthError(null);
+    if (password.length < 8) {
+      setAuthError("La contraseña debe tener al menos 8 letras o números.");
+      return;
+    }
+    setAuthCargando(true);
+    try {
+      const res = await restablecerClave(tokenRestablecer ?? "", password);
+      try {
+        // Sacamos el token de la dirección: ya se usó.
+        window.history.replaceState(null, "", window.location.pathname + "#mi-iva");
+      } catch {
+        /* sin history */
+      }
+      setUsuario(res.user);
+      setPassword("");
+      setVista("normal");
+      recienEntro.current = true;
+      setAutenticado(true);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "No pudimos guardar la contraseña. Intenta de nuevo.");
+    } finally {
+      setAuthCargando(false);
+    }
   };
 
   const cambiarModo = (nuevo: Modo) => {
@@ -556,7 +624,83 @@ export default function MiIva() {
         </h2>
 
         <div className="mt-8 max-w-2xl">
-          {!autenticado ? (
+          {!autenticado && vista === "recuperar" ? (
+            /* ── Olvidé mi contraseña ───────────────────────────────── */
+            <div className={tarjeta}>
+              <h3 className="font-display text-2xl font-semibold text-papel">¿Olvidaste tu contraseña?</h3>
+              <p className="mt-3 text-base text-humo leading-relaxed">
+                Escribe tu RUT o tu correo y te mandamos un link para crear una contraseña nueva.
+              </p>
+              {recuperarMsg ? (
+                mensajeOk(recuperarMsg)
+              ) : (
+                <form method="post" action="#mi-iva" onSubmit={(e) => void onRecuperar(e)} className="mt-6 space-y-5">
+                  <label className="block">
+                    <span className={labelTxt}>Tu RUT o tu correo</span>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="username"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Ejemplo: 76.123.456-7"
+                      className={inputCls}
+                    />
+                  </label>
+                  {mensajeError(authError)}
+                  <button type="submit" disabled={authCargando} className={btnPrimario}>
+                    {authCargando ? "Enviando…" : "Enviarme el link"}
+                  </button>
+                </form>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setVista("normal");
+                  setAuthError(null);
+                  setRecuperarMsg(null);
+                }}
+                className="mt-4 w-full min-h-[44px] text-base text-humo underline underline-offset-4 hover:text-papel"
+              >
+                ← Volver a entrar
+              </button>
+              {ayuda}
+            </div>
+          ) : !autenticado && vista === "restablecer" ? (
+            /* ── Crear contraseña nueva (desde el link del correo) ──── */
+            <div className={tarjeta}>
+              <h3 className="font-display text-2xl font-semibold text-papel">Crea tu contraseña nueva</h3>
+              <form method="post" action="#mi-iva" onSubmit={(e) => void onRestablecer(e)} className="mt-6 space-y-5">
+                <label className="block">
+                  <span className={labelTxt}>Contraseña nueva</span>
+                  <div className="flex gap-2">
+                    <input
+                      type={verPassword ? "text" : "password"}
+                      required
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className={inputCls}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerPassword((v) => !v)}
+                      aria-pressed={verPassword}
+                      className="min-h-[52px] shrink-0 rounded-xl border-2 border-linea px-4 text-base text-papel hover:border-humo"
+                    >
+                      {verPassword ? "Ocultar" : "Ver"}
+                    </button>
+                  </div>
+                  <p className={ayudaTxt}>Mínimo 8 letras o números.</p>
+                </label>
+                {mensajeError(authError)}
+                <button type="submit" disabled={authCargando} className={btnPrimario}>
+                  {authCargando ? "Guardando…" : "Guardar y entrar"}
+                </button>
+              </form>
+              {ayuda}
+            </div>
+          ) : !autenticado ? (
             /* ── Estado: sin sesión ─────────────────────────────────── */
             <div className={tarjeta}>
               {/* Dos botones grandes en vez de un link chico escondido abajo */}
@@ -715,6 +859,18 @@ export default function MiIva() {
                       : "Entrar"}
                 </button>
               </form>
+              {modo === "login" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVista("recuperar");
+                    setAuthError(null);
+                  }}
+                  className="mt-4 w-full min-h-[44px] text-base font-semibold text-cancha underline underline-offset-4 hover:text-cancha-dim"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
               {ayuda}
             </div>
           ) : empresas === null ? (

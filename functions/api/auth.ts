@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { hashPassword, verifyPassword } from '../_lib/passwords';
 import { signToken, authUser } from '../_lib/jwt';
+import { correoDisponible, enviarLinkRecuperacion, consumirToken, type RecuperarEnv } from '../_lib/recuperar';
 import { rutValido, formatearRut, limpiarRut } from '../_lib/rut';
 import { texto, email as emailNorm } from '../_lib/sanitize';
 import {
@@ -60,7 +61,7 @@ function toPublicUser(user: UserRow, company: CompanyRow | undefined): PublicUse
   };
 }
 
-const auth = new Hono<{ Bindings: Env & LimitesEnv }>();
+const auth = new Hono<{ Bindings: Env & LimitesEnv & RecuperarEnv }>();
 
 /** POST /register — crea la cuenta de la PERSONA; la empresa se puede
  *  agregar al registrar (compat) o después vía POST /api/empresas. */
@@ -230,6 +231,82 @@ auth.post('/login', async (c) => {
     [user.id],
   );
 
+  const token = await signToken(user.id, c.env.JWT_SECRET);
+  return c.json({ token, user: toPublicUser(user, companies[0]) });
+});
+
+/**
+ * POST /recuperar { identificador } — envía un link para crear contraseña nueva.
+ * Responde lo mismo exista o no la cuenta (no revela qué correos/RUT están registrados).
+ */
+auth.post('/recuperar', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { identificador?: string };
+  const bruto = String(body.identificador ?? '').trim();
+  const OK = {
+    ok: true,
+    mensaje: 'Si hay una cuenta con ese RUT o correo, te enviamos un correo con un link para crear una contraseña nueva. Revisa también la carpeta de spam.',
+  };
+  if (!bruto) return c.json({ error: 'Escribe tu RUT o tu correo.' }, 400);
+  if (!correoDisponible(c.env)) {
+    return c.json({ error: 'Por ahora no podemos enviar correos. Escríbenos por WhatsApp y te ayudamos a entrar.' }, 503);
+  }
+
+  const ip = ipDe(c);
+  const claveIp = await claveIntento('recuperar-ip', ip || 'sin-ip');
+  const claveCuenta = await claveIntento('recuperar-cuenta', bruto.toLowerCase());
+  if (
+    (await excedido(c.env, claveIp, 10, 60)) ||
+    (await excedido(c.env, claveCuenta, 3, 60))
+  ) {
+    return c.json({ error: MSG_DEMASIADOS }, 429);
+  }
+  await anotar(c.env, claveIp, claveCuenta);
+
+  const esCorreo = bruto.includes('@');
+  const users = esCorreo
+    ? await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash FROM users WHERE email = $1 LIMIT 1', [emailNorm(bruto)])
+    : rutValido(bruto)
+      ? await q<UserRow>(
+          c.env,
+          `SELECT DISTINCT u.id, u.email, u.nombre, u.password_hash
+             FROM users u JOIN companies co ON co.user_id = u.id
+            WHERE regexp_replace(upper(co.rut), '[^0-9K]', '', 'g') = $1
+            LIMIT 2`,
+          [limpiarRut(bruto)],
+        )
+      : [];
+  if (users.length === 1) {
+    try {
+      await enviarLinkRecuperacion(c.env, users[0]);
+    } catch (e) {
+      console.error('recuperar: no se pudo enviar el correo', (e as Error).message);
+      return c.json({ error: 'No pudimos enviar el correo. Intenta en unos minutos o escríbenos por WhatsApp.' }, 503);
+    }
+  }
+  return c.json(OK);
+});
+
+/** POST /restablecer { token, password } — fija la contraseña nueva y deja la sesión iniciada. */
+auth.post('/restablecer', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { token?: string; password?: string };
+  const password = body.password;
+  if (typeof password !== 'string' || password.length < 8) {
+    return c.json({ error: 'La contraseña debe tener al menos 8 letras o números.' }, 400);
+  }
+  const userId = await consumirToken(c.env, String(body.token ?? ''));
+  if (!userId) {
+    return c.json({ error: 'El link ya se usó o venció. Pide uno nuevo con "¿Olvidaste tu contraseña?".' }, 400);
+  }
+  await q(c.env, 'UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(password), userId]);
+  const users = await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+  const user = users[0];
+  if (!user) return c.json({ error: 'No encontramos la cuenta.' }, 400);
+  await limpiar(c.env, await claveIntento('login-cuenta', user.email));
+  const companies = await q<CompanyRow>(
+    c.env,
+    'SELECT id, user_id, nombre, rut FROM companies WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1',
+    [user.id],
+  );
   const token = await signToken(user.id, c.env.JWT_SECRET);
   return c.json({ token, user: toPublicUser(user, companies[0]) });
 });
