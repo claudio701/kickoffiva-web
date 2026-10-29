@@ -42,8 +42,29 @@ const etapasPico = [
   { duration: '30s', target: 0 },
 ];
 
+const VISITAS_MIN = parseInt(__ENV.VISITAS_MIN || '1000', 10); // visitas por minuto esperadas en el peak
+const RPS = Math.max(1, Math.ceil(VISITAS_MIN / 60));                  // requests por segundo objetivo
+
+// Escenario "tasa": fija la tasa de llegada (visitas/min). Es el más realista para un
+// lanzamiento: k6 lanza RPS por segundo pase lo que pase, y sube los VUs que haga falta.
+const escenarioTasa = {
+  tasa: {
+    executor: 'ramping-arrival-rate',
+    startRate: Math.ceil(RPS / 4),
+    timeUnit: '1s',
+    preAllocatedVUs: Math.max(20, RPS * 3),
+    maxVUs: Math.max(50, RPS * 10),
+    stages: [
+      { duration: '30s', target: RPS },            // sube a la tasa objetivo
+      { duration: '3m',  target: RPS },            // la sostiene
+      { duration: '1m',  target: RPS * 3 },        // prueba 3x el peak (margen de prensa)
+      { duration: '30s', target: 0 },
+    ],
+  },
+};
+
 export const options = {
-  stages: ESCENARIO === 'pico' ? etapasPico : etapasCarga,
+  ...(ESCENARIO === 'tasa' ? { scenarios: escenarioTasa } : { stages: ESCENARIO === 'pico' ? etapasPico : etapasCarga }),
   thresholds: {
     http_req_failed: ['rate<0.02'],      // <2% de errores
     http_req_duration: ['p(95)<1500'],   // p95 bajo 1,5 s
