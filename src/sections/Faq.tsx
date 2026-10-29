@@ -8,11 +8,11 @@ import {
 const FAQS = [
   {
     q: "¿Cómo calculan mi IVA el día 28 si el SII aún no publica nada?",
-    a: "Porque el sistema lee tus documentos tributarios todos los días del mes, no una vez al mes. Cuando llega el día 28, el cierre ya está procesado: solo se consolida. El SII publica su propuesta recién el día 5 del mes siguiente — para entonces tú ya tienes tu número hace diez días.",
+    a: "Porque no esperamos al cierre: con un botón traes desde el SII las facturas del mes y el sistema calcula tu IVA en el momento. El día 28 ya puedes ver tu número estimado, antes de que el SII publique su propuesta de F29. Las facturas que lleguen después se suman la próxima vez que las traigas.",
   },
   {
     q: "¿Tengo que darles mi clave del SII?",
-    a: "No necesariamente: tienes dos vías. La recomendada es el Mandatario Digital (art. 9° del Código Tributario): nos autorizas en sii.cl desde el menú Mandatarios y operamos con nuestra propia clave — la tuya jamás sale de tus manos y la revocas cuando quieras, directo en el SII. Si prefieres automatización total, guardas tu clave cifrada con AES-256-GCM: nadie puede leerla, ni siquiera el equipo de KickoffIVA, y el sistema baja tus libros solo.",
+    a: "No necesariamente: tienes dos vías. La recomendada es el Mandatario Digital (art. 9° del Código Tributario): nos autorizas en sii.cl desde el menú Mandatarios y operamos con nuestra propia clave — la tuya jamás sale de tus manos y la revocas cuando quieras, directo en el SII. Si prefieres hacerlo tú mismo desde la app, guardas tu clave y queda cifrada con AES-256-GCM: nunca se muestra en pantalla y el sistema solo la usa para traer tus libros del SII. Puedes borrarla cuando quieras desde tu panel.",
   },
   {
     q: "¿Esto reemplaza a mi contador?",

@@ -6,6 +6,8 @@
  *                    404 { error: "Sin empresa", empresa: null } si la cuenta
  *                    aún no tiene empresa (NO 401: la sesión sigue válida).
  *   PUT  /sii     -> guarda { rutSii, claveSii } cifrada con AES-256-GCM
+ *                    (y limpia la marca de clave rechazada por el SII)
+ *   DELETE /sii   -> borra RUT y clave SII de la empresa (revocación desde el panel)
  *   PUT  /ppm     -> fija la tasa PPM a mano (fracción, 0 a 0.30; uso del equipo).
  *                    Lo normal es que se lea sola del SII (_lib/ppm.ts).
  *
@@ -19,6 +21,7 @@ import { q, type Env } from '../_lib/db';
 import { encryptClave } from '../_lib/crypto';
 import { rutValido, formatearRut } from '../_lib/rut';
 import { asegurarColumnasPpm } from '../_lib/ppm';
+import { asegurarColumnaRechazo } from '../_lib/sii-estado';
 
 const TASA_PPM_MAX = 0.3;
 
@@ -44,9 +47,10 @@ app.get('/', async (c) => {
   if (!p.companyId) return c.json({ error: 'Sin empresa', empresa: null }, 404);
 
   await asegurarColumnasPpm(c.env);
+  await asegurarColumnaRechazo(c.env);
   const rows = (await q(
     c.env,
-    'SELECT nombre, rut, tasa_ppm, tasa_ppm_origen, sii_rut, sii_clave_enc FROM companies WHERE id = $1',
+    'SELECT nombre, rut, tasa_ppm, tasa_ppm_origen, sii_rut, sii_clave_enc, sii_clave_rechazada_en FROM companies WHERE id = $1',
     [p.companyId],
   )) as Array<{
     nombre: string | null;
@@ -55,6 +59,7 @@ app.get('/', async (c) => {
     tasa_ppm_origen: string | null;
     sii_rut: string | null;
     sii_clave_enc: string | null;
+    sii_clave_rechazada_en: string | null;
   }>;
 
   const company = rows?.[0];
@@ -68,6 +73,8 @@ app.get('/', async (c) => {
     // 'sii' = leída del F29; 'defecto' = 1% inicial mientras no la leamos; 'manual' = equipo.
     tasaPpmOrigen: company.tasa_ppm_origen ?? 'defecto',
     siiConfigurado: Boolean(company.sii_rut && company.sii_clave_enc),
+    // El SII rechazó la clave guardada: no se reintenta hasta que guarde una nueva.
+    siiClaveRechazada: Boolean(company.sii_clave_enc && company.sii_clave_rechazada_en),
   });
 });
 
@@ -92,13 +99,29 @@ app.put('/sii', async (c) => {
   }
 
   const claveEnc = await encryptClave(c.env, p.companyId, claveSii);
+  await asegurarColumnaRechazo(c.env);
   await q(
     c.env,
-    'UPDATE companies SET sii_rut = $1, sii_clave_enc = $2 WHERE id = $3',
+    'UPDATE companies SET sii_rut = $1, sii_clave_enc = $2, sii_clave_rechazada_en = NULL WHERE id = $3',
     [formatearRut(rutSii), claveEnc, p.companyId],
   );
 
   return c.json({ ok: true, siiConfigurado: true });
+});
+
+app.delete('/sii', async (c) => {
+  const p = await principal(c);
+  if (!p.ok) return c.json({ error: 'No autorizado' }, 401);
+  if (!p.companyId) return c.json({ error: 'Primero agrega tu empresa' }, 400);
+
+  await asegurarColumnaRechazo(c.env);
+  await q(
+    c.env,
+    'UPDATE companies SET sii_rut = NULL, sii_clave_enc = NULL, sii_clave_rechazada_en = NULL WHERE id = $1',
+    [p.companyId],
+  );
+
+  return c.json({ ok: true, siiConfigurado: false });
 });
 
 app.put('/ppm', async (c) => {

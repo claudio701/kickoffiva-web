@@ -70,6 +70,8 @@ export interface Empresa {
   /** De dónde salió la tasa: 'sii' (leída del F29), 'defecto' (1% mientras no la leemos), 'manual' (equipo). */
   tasaPpmOrigen: "sii" | "defecto" | "manual";
   siiConfigurado: boolean;
+  /** El SII rechazó la clave guardada: no se reintenta hasta guardar una nueva. */
+  siiClaveRechazada?: boolean;
 }
 
 export interface ResultadoSync {
@@ -340,6 +342,11 @@ export async function guardarCredencialesSii(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rutSii, claveSii }),
   });
+}
+
+export async function borrarCredencialesSii(): Promise<{ ok: boolean; siiConfigurado: boolean }> {
+  // DELETE /api/empresa/sii (Bearer) — borra RUT y clave del SII de la empresa.
+  return apiJson("/api/empresa/sii", { method: "DELETE" });
 }
 
 export async function sincronizarSii(periodo: string): Promise<ResultadoSync> {

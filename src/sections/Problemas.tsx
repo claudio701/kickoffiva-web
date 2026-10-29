@@ -3,7 +3,7 @@ const PROBLEMAS = [
     n: "01",
     titulo: "El SII te avisa cuando ya es tarde",
     texto:
-      "Su propuesta llega el día 5 del mes siguiente. Nosotros te damos tu IVA el día 28 del mismo mes. Diez días de ventaja para ordenar la caja.",
+      "Su propuesta de F29 llega recién el mes siguiente. Con KickoffIVA ves tu IVA el día 28 del mismo mes, con tiempo para ordenar la caja.",
   },
   {
     n: "02",

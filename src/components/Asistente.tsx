@@ -50,7 +50,7 @@ const TEMAS: Tema[] = [
   {
     pregunta: "¿Es seguro darles mi clave?",
     respuesta:
-      "Sí. Tu clave se guarda cifrada (como en los bancos) y nadie del equipo puede verla. Solo la usamos para traer tus facturas. Y si prefieres no darla, puedes autorizarnos como mandatario en el SII.",
+      "Sí. Tu clave se guarda cifrada (como en los bancos) y nunca se muestra en pantalla. Solo la usa el sistema para traer tus facturas, y puedes borrarla cuando quieras desde tu panel. Y si prefieres no darla, puedes autorizarnos como mandatario en el SII.",
   },
   {
     pregunta: "No me sale, estoy perdido",

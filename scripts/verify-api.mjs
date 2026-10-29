@@ -138,9 +138,14 @@ check('guardar credenciales SII', sii.status === 200 && sii.json?.siiConfigurado
 const emp2 = await api('/empresa', { token });
 check('empresa refleja siiConfigurado', emp2.json?.siiConfigurado === true, `body=${emp2.text.slice(0, 200)}`);
 
-// 16. Sincronizar SII con clave falsa → error controlado (400 o 502), no 500
-const sync = await api('/sii/sincronizar', { method: 'POST', token, body: { periodo: periodo.replace('-', '') } });
-check('sincronizar SII → error controlado', [400, 503].includes(sync.status) && !!sync.json?.error, `status=${sync.status} body=${sync.text.slice(0, 200)}`);
+// 16. Borrar credenciales SII. Antes este paso sincronizaba contra el SII real
+// con una clave falsa para un RUT que puede existir, y la cuenta de prueba
+// quedaba con esa clave guardada: el cron la reintentaba a diario. Nunca más se
+// envía una clave falsa al SII desde la verificación en producción.
+const delSii = await api('/empresa/sii', { method: 'DELETE', token });
+check('borrar credenciales SII', delSii.status === 200 && delSii.json?.siiConfigurado === false, `status=${delSii.status} body=${delSii.text.slice(0, 200)}`);
+const emp3 = await api('/empresa', { token });
+check('empresa refleja clave borrada', emp3.json?.siiConfigurado === false, `body=${emp3.text.slice(0, 200)}`);
 
 // ── Multiempresa: cuenta persona + N empresas ────────────────────────────────
 

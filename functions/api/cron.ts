@@ -12,7 +12,8 @@
 import { Hono, type Context } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { alertaDelDia, alertaSiiNotificacion, hoyEnChile, waLink, type DatosEmpresa } from '../_lib/alerts';
-import { SiiClient } from '../_sii/client';
+import { CredencialesInvalidas, SiiClient } from '../_sii/client';
+import { asegurarColumnaRechazo, marcarClaveRechazada } from '../_lib/sii-estado';
 import { actualizarTasaPpmDesdeSii } from '../_lib/ppm';
 import { getSiiCreds, recifrarClaves } from '../_lib/crypto';
 import { loadDocsPeriodo, recifrarDocs, eliminarColumnasLegacy } from '../_lib/documents';
@@ -100,12 +101,16 @@ cron.post('/generar', async (c) => {
 
   // ── Revisión del buzón SII (solo empresas con clave configurada) ──
   // Best-effort: si el portal falla o cambia, se silencia y se sigue.
+  // Se excluyen las claves que el SII ya rechazó: reintentarlas a diario puede
+  // bloquear la Clave Tributaria del cliente.
+  await asegurarColumnaRechazo(c.env);
   const conSii = (await q(
     c.env,
     `SELECT c.id, c.nombre, u.nombre AS persona, u.telefono
        FROM companies c
        JOIN users u ON u.id = c.user_id
-      WHERE c.sii_rut IS NOT NULL AND c.sii_clave_enc IS NOT NULL`,
+      WHERE c.sii_rut IS NOT NULL AND c.sii_clave_enc IS NOT NULL
+        AND c.sii_clave_rechazada_en IS NULL`,
   )) as Array<{ id: string; nombre: string; persona: string | null; telefono: string | null }>;
 
   let siiRevisadas = 0;
@@ -140,8 +145,16 @@ cron.post('/generar', async (c) => {
         creadas += 1;
         tipos.sii_notificacion = (tipos.sii_notificacion ?? 0) + 1;
       }
-    } catch {
-      // Silencioso: SII caído, WAF, clave rechazada o markup nuevo.
+    } catch (e) {
+      // Clave rechazada: se marca para no volver a intentarlo.
+      if (e instanceof CredencialesInvalidas) {
+        try {
+          await marcarClaveRechazada(c.env, emp.id);
+        } catch {
+          /* best-effort */
+        }
+      }
+      // Lo demás es silencioso: SII caído, WAF o markup nuevo.
     }
   }
 

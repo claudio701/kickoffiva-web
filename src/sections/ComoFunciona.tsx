@@ -3,17 +3,17 @@ const PASOS = [
     n: "1",
     titulo: "Conectas tu SII una sola vez",
     texto:
-      "Nos das acceso con tu clave tributaria y el sistema empieza a leer tus facturas, notas de crédito y compras todos los días. Tú no vuelves a subir un papel.",
+      "Nos das acceso con tu clave tributaria (o nos autorizas como mandatario) y, con un botón, traes desde el SII tus facturas, notas de crédito y compras. Tú no vuelves a subir un papel.",
   },
   {
     n: "2",
     titulo: "El día 28, tu IVA ya está calculado",
     texto:
-      "Como el sistema procesó el mes completo en tiempo real, el cierre no toma días: toma minutos. Tienes tu número diez días antes de que el SII publique su propuesta. Ordenas la caja con tiempo, no con sustos.",
+      "Con las facturas ya cargadas, el cálculo no toma días: toma minutos. Tienes tu número antes de que el SII publique su propuesta. Ordenas la caja con tiempo, no con sustos.",
   },
   {
     n: "3",
-    titulo: "El sistema declara. Y si algo se tuerce, entran los humanos.",
+    titulo: "Declaras con el número listo. Y si algo se tuerce, entran los humanos.",
     texto:
       "Con el Plan a Todo Evento, tu F29 queda declarado en fecha todos los meses (sin el Plan, te avisamos cuánto pagar y hasta cuándo). Y si aparece una multa, una anotación o una fiscalización, no te llega una alerta para que te arregles solo: el caso lo toma el equipo tributario de Kickoff, con garantía de 10 días hábiles.",
   },
@@ -28,7 +28,7 @@ export default function ComoFunciona() {
           Cómo tu IVA está listo antes que el del SII
         </h2>
         <p className="mt-4 text-humo max-w-xl">
-          No es magia. Es que el sistema trabaja todos los días, no una vez al mes.
+          No es magia. Es que no esperas al cierre del mes para saber cuánto vas a pagar.
         </p>
 
         <ol className="mt-12 space-y-0">

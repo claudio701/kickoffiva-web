@@ -10,6 +10,7 @@ import {
   getEmpresas,
   getMe,
   getToken,
+  borrarCredencialesSii,
   guardarCredencialesSii,
   login,
   logout,
@@ -404,13 +405,38 @@ export default function MiIva() {
       await cargarCierre();
     } catch (e) {
       const msg = manejarError(e, "No pudimos traer tus facturas desde el SII. Intenta de nuevo en unos minutos o escríbenos por WhatsApp.");
+      const rechazada = /rechaz/i.test(msg);
       setSiiError(
-        /rechazadas/i.test(msg)
-          ? "El SII no aceptó tu RUT o tu clave. Revisa que sean los mismos con que entras a sii.cl y guárdalos de nuevo aquí abajo."
+        rechazada
+          ? "El SII no aceptó tu RUT o tu clave. Revisa que sean los mismos con que entras a sii.cl y guárdalos de nuevo aquí abajo. No volveremos a intentarlo hasta que lo hagas, para que el SII no bloquee tu clave."
           : msg
       );
+      if (rechazada) setEmpresa(await getEmpresa().catch(() => empresa));
     } finally {
       setSyncCargando(false);
+    }
+  };
+
+  const onBorrarSii = async () => {
+    if (
+      !window.confirm(
+        "¿Borrar tu clave del SII de KickoffIVA? Dejaremos de traer tus facturas hasta que la guardes de nuevo."
+      )
+    ) {
+      return;
+    }
+    setSiiError(null);
+    setSiiOk(null);
+    setSyncMsg(null);
+    setSiiCargando(true);
+    try {
+      await borrarCredencialesSii();
+      setSiiOk("Listo, borramos tu clave del SII. Ya no la tenemos guardada.");
+      setEmpresa(await getEmpresa());
+    } catch (e) {
+      setSiiError(manejarError(e, "No pudimos borrar tu clave. Intenta de nuevo."));
+    } finally {
+      setSiiCargando(false);
     }
   };
 
@@ -551,10 +577,17 @@ export default function MiIva() {
 
       {siiConectado ? (
         <div className="mt-4">
-          <p className="text-base text-cancha">✓ Tu clave del SII está guardada y protegida.</p>
+          {empresa?.siiClaveRechazada ? (
+            <p role="alert" className="rounded-xl border border-multa/50 bg-multa/10 px-4 py-3 text-base font-medium text-multa">
+              ⚠️ El SII rechazó tu clave. Para que no te la bloquee, no volveremos a intentarlo hasta que la guardes
+              de nuevo aquí abajo.
+            </p>
+          ) : (
+            <p className="text-base text-cancha">✓ Tu clave del SII está guardada y cifrada.</p>
+          )}
           <button
             type="button"
-            disabled={syncCargando || !periodo}
+            disabled={syncCargando || !periodo || Boolean(empresa?.siiClaveRechazada)}
             onClick={() => void onSincronizar()}
             className={`${btnPrimario} mt-4`}
           >
@@ -564,8 +597,9 @@ export default function MiIva() {
           {mensajeError(siiError)}
           {mensajeOk(syncMsg)}
           {mensajeOk(siiOk)}
-          {/* Ya conectado: el formulario queda plegado para no recargar la pantalla */}
-          <details className="mt-6 rounded-xl border border-linea p-4">
+          {/* Ya conectado: el formulario queda plegado para no recargar la pantalla
+              (abierto si el SII rechazó la clave, porque hay que guardarla de nuevo) */}
+          <details open={Boolean(empresa?.siiClaveRechazada)} className="mt-6 rounded-xl border border-linea p-4">
             <summary className="min-h-[44px] cursor-pointer py-2 text-base font-semibold text-papel">
               ¿Cambiaste tu clave del SII? Guárdala de nuevo
             </summary>
@@ -610,6 +644,14 @@ export default function MiIva() {
         </button>
       </form>
           </details>
+          <button
+            type="button"
+            disabled={siiCargando}
+            onClick={() => void onBorrarSii()}
+            className="mt-4 min-h-[44px] text-base font-semibold text-humo underline underline-offset-4 hover:text-papel"
+          >
+            Borrar mi clave del SII
+          </button>
         </div>
       ) : (
         <>
@@ -621,8 +663,8 @@ export default function MiIva() {
           <div className="mt-6 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-4">
             <p className="text-base font-semibold text-papel">🔒 Tu clave queda guardada bajo llave</p>
             <p className="mt-1.5 text-sm leading-relaxed text-humo">
-              Se guarda cifrada, como en los bancos. Nadie del equipo puede verla y nunca se
-              muestra en pantalla. Solo la usamos para traer tus facturas del SII.
+              Se guarda cifrada, como en los bancos, y nunca se muestra en pantalla. Solo la usa
+              el sistema para traer tus facturas del SII. Puedes borrarla cuando quieras.
             </p>
           </div>
           <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-6 space-y-5">

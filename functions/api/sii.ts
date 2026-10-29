@@ -31,6 +31,7 @@ import {
 } from '../_sii/client';
 import type { DocumentoRcv } from '../_sii/parse';
 import { actualizarTasaPpmDesdeSii } from '../_lib/ppm';
+import { claveRechazada, marcarClaveRechazada } from '../_lib/sii-estado';
 
 const SII_NO_DISPONIBLE = 'El SII no está disponible, intenta más tarde';
 
@@ -76,12 +77,25 @@ async function handleSincronizar(c: any): Promise<Response> {
     return c.json({ error: 'Credenciales SII no configuradas' }, 400);
   }
 
+  // Si el SII ya rechazó esta clave, no se reintenta: cada intento fallido
+  // acerca el bloqueo de la Clave Tributaria del cliente.
+  if (await claveRechazada(c.env, companyId)) {
+    return c.json(
+      { error: 'El SII rechazó tu clave. Guárdala de nuevo antes de volver a intentar.', claveRechazada: true },
+      409,
+    );
+  }
+
   const client = new SiiClient(c.env);
   try {
     await client.login(creds.rut, creds.clave);
   } catch (e) {
     if (e instanceof CredencialesInvalidas) {
-      return c.json({ error: 'Credenciales SII rechazadas por el portal' }, 400);
+      await marcarClaveRechazada(c.env, companyId);
+      return c.json(
+        { error: 'El SII rechazó tu clave. Guárdala de nuevo antes de volver a intentar.', claveRechazada: true },
+        400,
+      );
     }
     if (e instanceof SiiNoDisponible) {
       return c.json({ error: SII_NO_DISPONIBLE }, 503);
