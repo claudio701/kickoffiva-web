@@ -211,7 +211,7 @@ export default function MiIva() {
     ev.preventDefault();
     setEmpresaError(null);
     if (!nuevaNombre.trim()) {
-      setEmpresaError("Escribe el nombre de tu negocio.");
+      setEmpresaError("Escribe el nombre de la empresa.");
       return;
     }
     if (!rutValido(nuevaRut)) {
@@ -236,9 +236,9 @@ export default function MiIva() {
 
   const validarRegistro = (): ErroresRegistro => {
     const errs: ErroresRegistro = {};
-    if (!rutRegistro.trim()) errs.rut = "Escribe el RUT de tu negocio.";
+    if (!rutRegistro.trim()) errs.rut = "Escribe el RUT de la empresa.";
     else if (!rutValido(rutRegistro)) errs.rut = "El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-7).";
-    if (!nombre.trim()) errs.nombre = "Escribe el nombre de tu negocio o el tuyo.";
+    if (!nombre.trim()) errs.nombre = "Escribe el nombre de la empresa.";
     if (!email.trim()) {
       errs.email = "Escribe tu correo.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -725,7 +725,7 @@ export default function MiIva() {
                 {modo === "register" && paso(1, "Crea tu cuenta")}
                 <p className="text-base text-humo leading-relaxed">
                   {modo === "login"
-                    ? "Entra con tu RUT (o tu correo) y tu contraseña."
+                    ? "Entra con el RUT de la empresa (o tu correo) y tu contraseña."
                     : "Son 2 pasos y toma 2 minutos. No necesitas saber de impuestos."}
                 </p>
               </div>
@@ -734,7 +734,7 @@ export default function MiIva() {
                 {modo === "register" ? (
                   <>
                     <label className="block">
-                      <span className={labelTxt}>RUT de tu negocio</span>
+                      <span className={labelTxt}>RUT de la empresa</span>
                       <input
                         type="text"
                         required
@@ -748,18 +748,18 @@ export default function MiIva() {
                       {erroresRegistro.rut ? (
                         <p role="alert" className={errorTxt}>{erroresRegistro.rut}</p>
                       ) : (
-                        <p className={ayudaTxt}>El RUT con que haces tus facturas o boletas. Si trabajas como persona, es tu RUT.</p>
+                        <p className={ayudaTxt}>El RUT con que la empresa emite sus facturas. (Si facturas como persona natural con giro, es tu RUT.)</p>
                       )}
                     </label>
                     <label className="block">
-                      <span className={labelTxt}>Nombre de tu negocio o el tuyo</span>
+                      <span className={labelTxt}>Nombre de la empresa</span>
                       <input
                         type="text"
                         required
                         autoComplete="organization"
                         value={nombre}
                         onChange={(e) => setNombre(e.target.value)}
-                        placeholder="Ejemplo: Panadería Doña Rosa"
+                        placeholder="Ejemplo: Panadería Doña Rosa SpA"
                         aria-invalid={Boolean(erroresRegistro.nombre)}
                         className={`${inputCls} ${erroresRegistro.nombre ? inputErrorCls : ""}`}
                       />
@@ -783,7 +783,7 @@ export default function MiIva() {
                   </>
                 ) : (
                   <label className="block">
-                    <span className={labelTxt}>Tu RUT o tu correo</span>
+                    <span className={labelTxt}>RUT de la empresa o tu correo</span>
                     <input
                       type="text"
                       required
@@ -883,12 +883,12 @@ export default function MiIva() {
             <div className={tarjeta}>
               
               <h3 className="font-display text-2xl font-semibold text-papel">
-                {empresas.length === 0 ? "¿Cuál es tu negocio?" : "Agregar otro negocio"}
+                {empresas.length === 0 ? "¿Cuál es tu empresa?" : "Agregar otra empresa"}
               </h3>
               <p className="mt-3 text-base text-humo leading-relaxed">
                 {empresas.length === 0
-                  ? `Bien${usuario?.nombre ? `, ${usuario.nombre}` : ""}: tu cuenta está lista. Ahora dinos de qué negocio quieres ver el IVA.`
-                  : "Si manejas más de un negocio, agrégalo aquí y cambias entre ellos cuando quieras."}
+                  ? `Bien${usuario?.nombre ? `, ${usuario.nombre}` : ""}: tu cuenta está lista. Ahora dinos de qué empresa quieres ver el IVA.`
+                  : "Si manejas más de una empresa, agrégala aquí y cambias entre ellas cuando quieras."}
               </p>
               {calcGuardada && empresas.length === 0 && (
                 <p className="mt-4 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 text-base text-humo">
@@ -900,7 +900,7 @@ export default function MiIva() {
 
               <form method="post" action="#mi-iva" onSubmit={(e) => void onCrearEmpresa(e)} className="mt-6 space-y-5">
                 <label className="block">
-                  <span className={labelTxt}>Nombre del negocio</span>
+                  <span className={labelTxt}>Nombre de la empresa</span>
                   <input
                     type="text"
                     required
@@ -912,7 +912,7 @@ export default function MiIva() {
                   />
                 </label>
                 <label className="block">
-                  <span className={labelTxt}>RUT del negocio</span>
+                  <span className={labelTxt}>RUT de la empresa</span>
                   <input
                     type="text"
                     required
@@ -931,7 +931,7 @@ export default function MiIva() {
 
                 <div className="flex flex-col gap-3">
                   <button type="submit" disabled={empresaCargando} className={btnPrimario}>
-                    {empresaCargando ? "Guardando…" : empresas.length === 0 ? "Seguir" : "Agregar negocio"}
+                    {empresaCargando ? "Guardando…" : empresas.length === 0 ? "Seguir" : "Agregar empresa"}
                   </button>
                   {empresas.length > 0 && (
                     <button
@@ -979,7 +979,7 @@ export default function MiIva() {
                   onClick={() => setMostrarAgregar(true)}
                   className="min-h-[44px] text-base font-semibold text-cancha underline underline-offset-4 hover:text-cancha-dim"
                 >
-                  + Agregar otro negocio
+                  + Agregar otra empresa
                 </button>
               </div>
 

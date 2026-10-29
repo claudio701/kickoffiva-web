@@ -20,13 +20,13 @@ interface Tema {
 const TEMAS: Tema[] = [
   {
     pregunta: "Quiero entrar y probar",
-    respuesta: "¡Buenísimo! Toca el botón y te llevo. Si es tu primera vez, elige \"Soy nuevo\": con tu RUT, tu correo y una contraseña quedas adentro.",
+    respuesta: "¡Buenísimo! Toca el botón y te llevo. Si es tu primera vez, elige \"Soy nuevo\": con el RUT de la empresa, tu correo y una contraseña quedas adentro.",
     accion: { texto: "Entrar", href: "#mi-iva" },
   },
   {
     pregunta: "Recién llego, ¿qué hago?",
     respuesta:
-      "¡Bienvenido! Son 2 pasos: 1) crea tu cuenta con el RUT de tu negocio, tu correo y una contraseña; 2) conecta el SII. Nosotros calculamos el resto.",
+      "¡Bienvenido! Son 2 pasos: 1) crea tu cuenta con el RUT y el nombre de la empresa, tu correo y una contraseña; 2) conecta el SII. Nosotros calculamos el resto.",
     accion: { texto: "Llévame a crear mi cuenta", href: "#mi-iva" },
   },
   {
