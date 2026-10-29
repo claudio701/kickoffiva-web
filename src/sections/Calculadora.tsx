@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { registrarEvento } from "../lib/eventos";
 import { clp } from "../config";
 import { BotonEntrar, BotonConversar } from "../components/Botones";
 
@@ -79,6 +80,9 @@ export default function Calculadora() {
   // Guardar los valores para que Mi IVA los retome al registrarse, solo si la
   // persona movió algo (si no, le atribuiríamos números que nunca escribió).
   const [tocado, setTocado] = useState(false);
+  useEffect(() => {
+    if (tocado) registrarEvento("calculadora_uso", "calculadora");
+  }, [tocado]);
   useEffect(() => {
     if (!tocado) return;
     try {

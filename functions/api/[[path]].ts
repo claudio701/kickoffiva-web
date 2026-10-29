@@ -8,6 +8,7 @@ import empresa from './empresa';
 import empresas from './empresas';
 import cron from './cron';
 import sii from './sii';
+import eventos from './eventos';
 import type { Env } from '../_lib/db';
 
 const app = new Hono<{ Bindings: Env }>().basePath('/api');
@@ -41,6 +42,7 @@ app.route('/empresa', empresa);
 app.route('/empresas', empresas);
 app.route('/sii', sii);
 app.route('/cron', cron);
+app.route('/eventos', eventos);
 
 app.onError((err, c) => {
   console.error('API error:', err);
