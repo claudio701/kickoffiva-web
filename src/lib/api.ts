@@ -4,6 +4,7 @@
 // TODOS los llamados HTTP del sitio pasan por este módulo.
 
 import { API_BASE_URL } from "../config";
+import { registrarEvento } from "./eventos";
 
 const TOKEN_KEY = "kickoffiva_token";
 const USER_KEY = "kickoffiva_user";
@@ -229,6 +230,7 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
   clearToken(); // cuenta nueva: descarta cualquier empresa activa de una sesión anterior
   setToken(data.token);
   setStoredUser(data.user);
+  registrarEvento("registro_ok", "mi-iva");
   return data;
 }
 

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { escucharClics } from './lib/eventos'
 
 const rootEl = document.getElementById('root')!
 const app = (
@@ -17,6 +18,9 @@ if (rootEl.hasChildNodes()) {
 } else {
   createRoot(rootEl).render(app)
 }
+
+// Medición del embudo (clics a WhatsApp y CTA marcados); sin cookies.
+escucharClics()
 
 // Service worker solo en producción (permite CSP estricta: script-src 'self')
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
