@@ -19,6 +19,11 @@ interface Tema {
 
 const TEMAS: Tema[] = [
   {
+    pregunta: "Quiero entrar y probar",
+    respuesta: "¡Buenísimo! Toca el botón y te llevo a Mi IVA. Si es tu primera vez, elige \"Soy nuevo\".",
+    accion: { texto: "Entrar a Mi IVA", href: "#mi-iva" },
+  },
+  {
     pregunta: "Recién llego, ¿qué hago?",
     respuesta:
       "¡Bienvenido! Son 3 pasos: 1) crea tu cuenta con tu nombre, correo y una contraseña; 2) escribe el nombre y RUT de tu negocio; 3) conecta el SII. Nosotros calculamos el resto.",

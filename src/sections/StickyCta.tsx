@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { WHATSAPP_URL } from "../config";
 
 // Barra fija inferior solo en móvil: aparece tras hacer scroll,
 // para que el CTA humano siempre esté a un toque de distancia.
@@ -25,12 +24,10 @@ export default function StickyCta() {
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       <a
-        href={WHATSAPP_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center justify-center rounded-full bg-cancha py-3.5 text-base font-semibold text-tinta"
+        href="#mi-iva"
+        className="flex min-h-[52px] items-center justify-center rounded-full bg-cancha py-3.5 text-lg font-semibold text-tinta"
       >
-        Ordenar mi IVA — hablemos →
+        Entrar a Mi IVA →
       </a>
     </div>
   );

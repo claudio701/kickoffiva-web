@@ -1,4 +1,4 @@
-import { WHATSAPP_URL } from "../config";
+import { BotonEntrar, BotonConversar } from "../components/Botones";
 
 const DOLORES = [
   "multas automáticas",
@@ -31,21 +31,15 @@ export default function Hero() {
         </p>
 
         <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
-          <a
-            href="#calculadora"
-            className="inline-flex justify-center rounded-full bg-cancha px-7 py-3.5 text-base font-semibold text-tinta hover:bg-cancha-dim transition-colors"
-          >
-            Haz la prueba — 30 segundos
-          </a>
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex justify-center rounded-full border border-linea px-7 py-3.5 text-base font-medium text-papel hover:border-humo transition-colors"
-          >
-            Hablemos por WhatsApp
-          </a>
+          <BotonEntrar />
+          <BotonConversar />
         </div>
+        <a
+          href="#calculadora"
+          className="mt-4 inline-block min-h-[44px] py-2 text-base text-cancha underline underline-offset-4 hover:text-cancha-dim"
+        >
+          O calcula en 30 segundos cuánto te ha costado el SII →
+        </a>
 
         <p className="mt-4 font-mono text-[11px] sm:text-xs text-humo">
           Sin instalar nada · sin letra chica · con equipo humano detrás

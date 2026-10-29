@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { WHATSAPP_URL } from "../config";
+import { abrirAsistente } from "../lib/asistente";
 
 const NAV = [
   { href: "#como-funciona", label: "Cómo funciona" },
@@ -51,20 +51,22 @@ export default function Header() {
 
         <div className="flex items-center gap-2 shrink-0">
           {/* Clientes que vuelven: "Entrar" siempre visible, sin buscar en el menú */}
+          <button
+            type="button"
+            onClick={abrirAsistente}
+            aria-label="Conversemos en línea"
+            className="rounded-full border border-linea px-3 sm:px-4 py-2.5 text-sm font-semibold text-papel hover:border-humo transition-colors"
+          >
+            <span aria-hidden="true">💬</span>
+            <span className="hidden sm:inline"> Conversemos en línea</span>
+          </button>
+          {/* Lo principal: entrar a probar, siempre visible y en el color de acción */}
           <a
             href="#mi-iva"
-            className="rounded-full border border-linea px-4 py-2.5 text-sm font-semibold text-papel hover:border-humo transition-colors"
+            onClick={() => setOpen(false)}
+            className="rounded-full bg-cancha px-5 py-2.5 text-base font-semibold text-tinta hover:bg-cancha-dim transition-colors"
           >
             Entrar
-          </a>
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-full bg-cancha px-4 sm:px-5 py-2.5 text-sm font-semibold text-tinta hover:bg-cancha-dim transition-colors"
-          >
-            <span className="hidden sm:inline">Hablemos →</span>
-            <span className="sm:hidden">WhatsApp</span>
           </a>
           <button
             type="button"

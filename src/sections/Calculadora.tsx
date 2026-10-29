@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { clp, waCalculadoraUrl } from "../config";
+import { clp } from "../config";
+import { BotonEntrar, BotonConversar } from "../components/Botones";
 
 export const CALC_STORAGE_KEY = "kickoffiva_calc";
 
@@ -178,20 +179,8 @@ export default function Calculadora() {
               </div>
             </dl>
 
-            <a
-              href={waCalculadoraUrl(r.total)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-8 inline-flex justify-center rounded-full bg-cancha px-7 py-3.5 text-base font-semibold text-tinta hover:bg-cancha-dim transition-colors"
-            >
-              Ordenar mi IVA →
-            </a>
-            <a
-              href="#mi-iva"
-              className="mt-3 inline-flex justify-center rounded-full border border-cancha/50 px-7 py-3 text-sm font-semibold text-cancha hover:bg-cancha/10 transition-colors"
-            >
-              Quiero mi número real, no estimado →
-            </a>
+            <BotonEntrar texto="Entrar y ver mi número real →" className="mt-8" />
+            <BotonConversar className="mt-3" />
             <p className="mt-3 text-center text-sm text-humo">
               Estimación referencial, no constituye asesoría tributaria. En Mi IVA tus datos se retoman automáticamente.
             </p>
