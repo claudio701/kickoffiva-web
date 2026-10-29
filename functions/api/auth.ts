@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { hashPassword, verifyPassword } from '../_lib/passwords';
 import { signToken, authUser } from '../_lib/jwt';
-import { rutValido, formatearRut } from '../_lib/rut';
+import { rutValido, formatearRut, limpiarRut } from '../_lib/rut';
 import { texto, email as emailNorm } from '../_lib/sanitize';
 import {
   LIMITES,
@@ -45,6 +45,9 @@ export interface PublicUser {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** RUT sin puntos ni guion, K mayúscula: igual que el índice companies_user_rut_unique. */
+const RUT_SQL = "regexp_replace(upper(rut), '[^0-9K]', '', 'g')";
 
 /** Builds the public user payload from user + (optional) company rows. */
 function toPublicUser(user: UserRow, company: CompanyRow | undefined): PublicUser {
@@ -112,6 +115,14 @@ auth.post('/register', async (c) => {
   }
   const rutEmpresa = rutEmpresaRaw ? formatearRut(rutEmpresaRaw) : undefined;
 
+  // Se puede entrar con el RUT: por eso un RUT no puede quedar en dos cuentas distintas.
+  if (rutEmpresaRaw) {
+    const ya = await q(c.env, `SELECT 1 FROM companies WHERE ${RUT_SQL} = $1 LIMIT 1`, [limpiarRut(rutEmpresaRaw)]);
+    if (ya.length > 0) {
+      return c.json({ error: 'Ese RUT ya tiene una cuenta. Toca "Ya tengo cuenta" para entrar.' }, 409);
+    }
+  }
+
   const userId = crypto.randomUUID();
   const passwordHash = await hashPassword(password);
 
@@ -125,7 +136,7 @@ auth.post('/register', async (c) => {
     ]);
   } catch (err) {
     if ((err as { code?: string })?.code === '23505') {
-      return c.json({ error: 'El correo ya está registrado' }, 409);
+      return c.json({ error: 'Ese correo ya tiene una cuenta. Toca "Ya tengo cuenta" para entrar.' }, 409);
     }
     throw err;
   }
@@ -161,20 +172,25 @@ auth.post('/register', async (c) => {
 /** POST /login — verifies credentials and returns a JWT. */
 auth.post('/login', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
-    email?: string;
+    /** RUT (del negocio con que se registró) o correo. */
+    identificador?: string;
+    email?: string; // compat: clientes antiguos mandan solo email
     password?: string;
     turnstileToken?: string;
   };
-  const email = emailNorm(body.email);
+  const bruto = String(body.identificador ?? body.email ?? '').trim();
   const password = body.password;
+  const esCorreo = bruto.includes('@');
+  const email = esCorreo ? emailNorm(bruto) : '';
+  const rut = !esCorreo && rutValido(bruto) ? limpiarRut(bruto) : '';
 
-  if (!email || typeof password !== 'string' || !password) {
+  if ((!email && !rut) || typeof password !== 'string' || !password) {
     return c.json({ error: 'Credenciales inválidas' }, 401);
   }
 
   // Anti fuerza bruta: tope de fallas por correo y por IP (15 min).
   const ip = ipDe(c);
-  const claveCorreo = await claveIntento('login-correo', email);
+  const claveCorreo = await claveIntento('login-cuenta', email || `rut:${rut}`);
   const claveIp = await claveIntento('login-ip', ip || 'sin-ip');
   if (
     (await excedido(c.env, claveCorreo, LIMITES.loginPorCorreo.max, LIMITES.loginPorCorreo.minutos)) ||
@@ -186,12 +202,22 @@ auth.post('/login', async (c) => {
     return c.json({ error: MSG_VERIFICACION }, 400);
   }
 
-  const users = await q<UserRow>(
-    c.env,
-    'SELECT id, email, nombre, password_hash FROM users WHERE email = $1 LIMIT 1',
-    [email],
-  );
-  const user = users[0];
+  const users = email
+    ? await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash FROM users WHERE email = $1 LIMIT 1', [email])
+    : await q<UserRow>(
+        c.env,
+        `SELECT DISTINCT u.id, u.email, u.nombre, u.password_hash
+           FROM users u JOIN companies co ON co.user_id = u.id
+          WHERE regexp_replace(upper(co.rut), '[^0-9K]', '', 'g') = $1
+          LIMIT 2`,
+        [rut],
+      );
+  // Un RUT que aparece en dos cuentas (p.ej. un contador y su cliente) es ambiguo: se pide el correo.
+  const user = users.length === 1 ? users[0] : undefined;
+  if (!email && users.length > 1) {
+    await anotar(c.env, claveCorreo, claveIp);
+    return c.json({ error: 'Ese RUT está en más de una cuenta. Entra con tu correo.' }, 401);
+  }
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     await anotar(c.env, claveCorreo, claveIp);
     return c.json({ error: 'Credenciales inválidas' }, 401);

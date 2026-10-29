@@ -20,13 +20,13 @@ interface Tema {
 const TEMAS: Tema[] = [
   {
     pregunta: "Quiero entrar y probar",
-    respuesta: "¡Buenísimo! Toca el botón y te llevo a Mi IVA. Si es tu primera vez, elige \"Soy nuevo\".",
-    accion: { texto: "Entrar a Mi IVA", href: "#mi-iva" },
+    respuesta: "¡Buenísimo! Toca el botón y te llevo. Si es tu primera vez, elige \"Soy nuevo\": con tu RUT, tu correo y una contraseña quedas adentro.",
+    accion: { texto: "Entrar", href: "#mi-iva" },
   },
   {
     pregunta: "Recién llego, ¿qué hago?",
     respuesta:
-      "¡Bienvenido! Son 3 pasos: 1) crea tu cuenta con tu nombre, correo y una contraseña; 2) escribe el nombre y RUT de tu negocio; 3) conecta el SII. Nosotros calculamos el resto.",
+      "¡Bienvenido! Son 2 pasos: 1) crea tu cuenta con el RUT de tu negocio, tu correo y una contraseña; 2) conecta el SII. Nosotros calculamos el resto.",
     accion: { texto: "Llévame a crear mi cuenta", href: "#mi-iva" },
   },
   {
@@ -88,12 +88,13 @@ export default function Asistente() {
   useEffect(() => {
     let visto = false;
     try {
-      visto = sessionStorage.getItem("kiko_saludo") === "1";
+      // Una vez por visita, y no a quien ya tiene sesión (ya sabe dónde está).
+      visto = sessionStorage.getItem("kiko_saludo") === "1" || localStorage.getItem("kickoffiva_token") !== null;
     } catch {
       /* storage bloqueado: saludamos igual */
     }
     if (visto) return;
-    const t = setTimeout(() => {
+    const mostrar = setTimeout(() => {
       setSaludo(true);
       try {
         sessionStorage.setItem("kiko_saludo", "1");
@@ -101,7 +102,12 @@ export default function Asistente() {
         /* sin storage */
       }
     }, 4000);
-    return () => clearTimeout(t);
+    // El globo se va solo para no tapar botones de la página.
+    const ocultar = setTimeout(() => setSaludo(false), 12000);
+    return () => {
+      clearTimeout(mostrar);
+      clearTimeout(ocultar);
+    };
   }, []);
 
   const cerrar = () => {

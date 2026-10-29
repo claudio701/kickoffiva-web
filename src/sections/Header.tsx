@@ -7,7 +7,7 @@ const NAV = [
   { href: "#plan", label: "Plan" },
   { href: "#servicios", label: "Servicios" },
   { href: "#faq", label: "Preguntas" },
-  { href: "#mi-iva", label: "Mi IVA" },
+  { href: "#mi-iva", label: "Entrar" },
 ];
 
 export default function Header() {

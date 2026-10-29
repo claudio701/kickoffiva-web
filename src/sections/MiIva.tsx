@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clp, WHATSAPP_MANDATARIO_URL } from "../config";
 import {
   ApiError,
@@ -59,6 +59,7 @@ function periodoActual(): string {
 type Modo = "login" | "register";
 
 interface ErroresRegistro {
+  rut?: string;
   nombre?: string;
   email?: string;
   password?: string;
@@ -77,6 +78,7 @@ export default function MiIva() {
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [rutRegistro, setRutRegistro] = useState("");
   const [erroresRegistro, setErroresRegistro] = useState<ErroresRegistro>({});
   const [authCargando, setAuthCargando] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -140,6 +142,16 @@ export default function MiIva() {
       setCierreCargando(false);
     }
   }, [manejarError]);
+
+  // Al entrar o crear la cuenta, la sección cambia de alto: llevamos a la persona
+  // al comienzo de su cuenta para que no quede mirando otra parte de la página.
+  const recienEntro = useRef(false);
+  useEffect(() => {
+    if (recienEntro.current && empresas !== null) {
+      recienEntro.current = false;
+      document.getElementById("mi-iva")?.scrollIntoView({ block: "start" });
+    }
+  }, [empresas]);
 
   // Cargar las empresas de la cuenta al autenticarse.
   useEffect(() => {
@@ -210,7 +222,9 @@ export default function MiIva() {
 
   const validarRegistro = (): ErroresRegistro => {
     const errs: ErroresRegistro = {};
-    if (!nombre.trim()) errs.nombre = "Escribe tu nombre.";
+    if (!rutRegistro.trim()) errs.rut = "Escribe el RUT de tu negocio.";
+    else if (!rutValido(rutRegistro)) errs.rut = "El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-7).";
+    if (!nombre.trim()) errs.nombre = "Escribe el nombre de tu negocio o el tuyo.";
     if (!email.trim()) {
       errs.email = "Escribe tu correo.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -244,17 +258,21 @@ export default function MiIva() {
               email: email.trim(),
               password,
               nombre: nombre.trim(),
+              // El negocio se crea junto con la cuenta: la persona queda adentro al tiro.
+              nombreEmpresa: nombre.trim(),
+              rutEmpresa: rutRegistro.trim(),
               ...(telefono.trim() ? { telefono: telefono.trim() } : {}),
               ...(token ? { turnstileToken: token } : {}),
             })
           : await login(email.trim(), password, token);
       setUsuario(res.user);
       setPassword("");
+      recienEntro.current = true;
       setAutenticado(true);
     } catch (e) {
       setAuthError(
         e instanceof ApiError && e.status === 401 && modo === "login"
-          ? "El correo o la contraseña no coinciden. Revisa e intenta de nuevo."
+          ? "El RUT o correo, o la contraseña, no coinciden. Revisa e intenta de nuevo."
           : e instanceof ApiError && e.status !== 401
           ? e.message
           : manejarError(
@@ -364,7 +382,7 @@ export default function MiIva() {
   /** Etiqueta "Paso N de 3" para que la persona sepa cuánto le falta. */
   const paso = (n: number, texto: string) => (
     <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-cancha/15 px-4 py-1.5 text-sm font-semibold text-cancha">
-      Paso {n} de 3 · {texto}
+      Paso {n} de 2 · {texto}
     </p>
   );
 
@@ -412,7 +430,7 @@ export default function MiIva() {
   /* ── Tarjeta: conexión con el SII (paso 3) ───────────────────────────── */
   const tarjetaSii = (
     <div id="conectar-sii" className={tarjeta}>
-      {!siiConectado && paso(3, "Conecta el SII")}
+      {!siiConectado && paso(2, "Conecta el SII")}
       <h3 className="font-display text-2xl font-semibold text-papel">
         {siiConectado ? "Tus facturas del SII" : "Trae tus facturas desde el SII"}
       </h3>
@@ -530,11 +548,11 @@ export default function MiIva() {
   );
 
   return (
-    <section id="mi-iva" className="border-b border-linea bg-panel/40">
+    <section id="mi-iva" className="scroll-mt-16 border-b border-linea bg-panel/40">
       <div className="wrap py-14 sm:py-20">
-        <p className="kicker mb-4">Mi IVA — área de clientes</p>
+        <p className="kicker mb-4">{autenticado ? "Tu cuenta" : "Entrar"}</p>
         <h2 className="headline text-3xl sm:text-4xl lg:text-5xl max-w-3xl">
-          Tu IVA del mes, en un solo número
+          {autenticado ? "Tu IVA del mes" : "Entra y mira tu IVA del mes"}
         </h2>
 
         <div className="mt-8 max-w-2xl">
@@ -563,63 +581,77 @@ export default function MiIva() {
                 {modo === "register" && paso(1, "Crea tu cuenta")}
                 <p className="text-base text-humo leading-relaxed">
                   {modo === "login"
-                    ? "Entra con tu correo y tu contraseña."
-                    : "Son 3 pasos y toma 2 minutos. No necesitas saber de impuestos."}
+                    ? "Entra con tu RUT (o tu correo) y tu contraseña."
+                    : "Son 2 pasos y toma 2 minutos. No necesitas saber de impuestos."}
                 </p>
               </div>
 
               <form method="post" action="#mi-iva" onSubmit={onSubmitAuth} className="mt-6 space-y-5" noValidate={modo === "register"}>
-                {modo === "register" && (
+                {modo === "register" ? (
                   <>
                     <label className="block">
-                      <span className={labelTxt}>Tu nombre</span>
+                      <span className={labelTxt}>RUT de tu negocio</span>
                       <input
                         type="text"
                         required
-                        autoComplete="name"
+                        autoComplete="off"
+                        value={rutRegistro}
+                        onChange={(e) => setRutRegistro(e.target.value)}
+                        placeholder="Ejemplo: 76.123.456-7"
+                        aria-invalid={Boolean(erroresRegistro.rut)}
+                        className={`${inputCls} ${erroresRegistro.rut ? inputErrorCls : ""}`}
+                      />
+                      {erroresRegistro.rut ? (
+                        <p role="alert" className={errorTxt}>{erroresRegistro.rut}</p>
+                      ) : (
+                        <p className={ayudaTxt}>El RUT con que haces tus facturas o boletas. Si trabajas como persona, es tu RUT.</p>
+                      )}
+                    </label>
+                    <label className="block">
+                      <span className={labelTxt}>Nombre de tu negocio o el tuyo</span>
+                      <input
+                        type="text"
+                        required
+                        autoComplete="organization"
                         value={nombre}
                         onChange={(e) => setNombre(e.target.value)}
-                        placeholder="Ejemplo: Rosa González"
+                        placeholder="Ejemplo: Panadería Doña Rosa"
                         aria-invalid={Boolean(erroresRegistro.nombre)}
                         className={`${inputCls} ${erroresRegistro.nombre ? inputErrorCls : ""}`}
                       />
                       {erroresRegistro.nombre && <p role="alert" className={errorTxt}>{erroresRegistro.nombre}</p>}
                     </label>
                     <label className="block">
-                      <span className={labelTxt}>
-                        Tu WhatsApp <span className="font-normal text-humo">(si quieres)</span>
-                      </span>
+                      <span className={labelTxt}>Tu correo</span>
                       <input
-                        type="tel"
-                        autoComplete="tel"
-                        inputMode="tel"
-                        value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
-                        placeholder="+56 9 1234 5678"
-                        className={inputCls}
+                        type="email"
+                        required
+                        autoComplete="email"
+                        inputMode="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Ejemplo: rosa@gmail.com"
+                        aria-invalid={Boolean(erroresRegistro.email)}
+                        className={`${inputCls} ${erroresRegistro.email ? inputErrorCls : ""}`}
                       />
-                      <p className={ayudaTxt}>Te avisamos cuánto pagar antes de que venza. Nada de publicidad.</p>
+                      {erroresRegistro.email && <p role="alert" className={errorTxt}>{erroresRegistro.email}</p>}
                     </label>
                   </>
+                ) : (
+                  <label className="block">
+                    <span className={labelTxt}>Tu RUT o tu correo</span>
+                    <input
+                      type="text"
+                      required
+                      autoComplete="username"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Ejemplo: 76.123.456-7"
+                      className={inputCls}
+                    />
+                  </label>
                 )}
 
-                <label className="block">
-                  <span className={labelTxt}>Tu correo</span>
-                  <input
-                    type="email"
-                    required
-                    autoComplete="email"
-                    inputMode="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Ejemplo: rosa@gmail.com"
-                    aria-invalid={Boolean(erroresRegistro.email && modo === "register")}
-                    className={`${inputCls} ${erroresRegistro.email && modo === "register" ? inputErrorCls : ""}`}
-                  />
-                  {erroresRegistro.email && modo === "register" && (
-                    <p role="alert" className={errorTxt}>{erroresRegistro.email}</p>
-                  )}
-                </label>
                 <label className="block">
                   <span className={labelTxt}>{modo === "register" ? "Inventa una contraseña" : "Tu contraseña"}</span>
                   <div className="flex gap-2">
@@ -651,6 +683,24 @@ export default function MiIva() {
                   )}
                 </label>
 
+                {modo === "register" && (
+                  <label className="block">
+                    <span className={labelTxt}>
+                      Tu WhatsApp <span className="font-normal text-humo">(si quieres)</span>
+                    </span>
+                    <input
+                      type="tel"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      value={telefono}
+                      onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="+56 9 1234 5678"
+                      className={inputCls}
+                    />
+                    <p className={ayudaTxt}>Te avisamos cuánto pagar antes de que venza. Nada de publicidad.</p>
+                  </label>
+                )}
+
                 <Turnstile key={captchaKey} onToken={setCaptchaToken} />
 
                 {mensajeError(authError)}
@@ -675,7 +725,7 @@ export default function MiIva() {
           ) : empresas.length === 0 || mostrarAgregar ? (
             /* ── Estado: agregar empresa (onboarding o adicional) ──── */
             <div className={tarjeta}>
-              {empresas.length === 0 && paso(2, "Tu negocio")}
+              
               <h3 className="font-display text-2xl font-semibold text-papel">
                 {empresas.length === 0 ? "¿Cuál es tu negocio?" : "Agregar otro negocio"}
               </h3>

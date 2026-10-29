@@ -182,7 +182,7 @@ export default function Calculadora() {
             <BotonEntrar texto="Entrar y ver mi número real →" className="mt-8" />
             <BotonConversar className="mt-3" />
             <p className="mt-3 text-center text-sm text-humo">
-              Estimación referencial, no constituye asesoría tributaria. En Mi IVA tus datos se retoman automáticamente.
+              Estimación referencial, no constituye asesoría tributaria. Al entrar, tus datos se retoman automáticamente.
             </p>
           </div>
         </div>

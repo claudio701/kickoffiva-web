@@ -218,14 +218,15 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
   return data;
 }
 
-export async function login(email: string, password: string, turnstileToken?: string): Promise<AuthResponse> {
+/** identificador = RUT del negocio o correo. */
+export async function login(identificador: string, password: string, turnstileToken?: string): Promise<AuthResponse> {
   // POST /api/auth/login → {token, user} | 401 credenciales inválidas
   const data = await apiJson<AuthResponse>(
     "/api/auth/login",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, ...(turnstileToken ? { turnstileToken } : {}) }),
+      body: JSON.stringify({ identificador, password, ...(turnstileToken ? { turnstileToken } : {}) }),
     },
     { auth: false }
   );

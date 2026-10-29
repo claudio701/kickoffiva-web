@@ -27,7 +27,7 @@ export default function StickyCta() {
         href="#mi-iva"
         className="flex min-h-[52px] items-center justify-center rounded-full bg-cancha py-3.5 text-lg font-semibold text-tinta"
       >
-        Entrar a Mi IVA →
+        Entrar y probar →
       </a>
     </div>
   );
