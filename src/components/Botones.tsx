@@ -1,4 +1,5 @@
 import { abrirAsistente } from "../lib/asistente";
+import { irAEntrar, useSesion } from "../lib/sesion";
 
 /**
  * Botones de acción comunes. Regla de usabilidad: en cualquier parte del sitio la
@@ -14,14 +15,16 @@ export function BotonEntrar({
   oscuro?: boolean;
   className?: string;
 }) {
+  const sesion = useSesion();
   return (
     <a
       href="#mi-iva"
+      onClick={() => !sesion && irAEntrar("register")}
       className={`inline-flex min-h-[52px] items-center justify-center rounded-full px-8 py-3.5 text-lg font-semibold transition-colors ${
         oscuro ? "bg-tinta text-cancha hover:bg-panel" : "bg-cancha text-tinta hover:bg-cancha-dim"
       } ${className}`}
     >
-      {texto}
+      {sesion ? "Ver mi IVA →" : texto}
     </a>
   );
 }
@@ -50,6 +53,8 @@ export function BotonConversar({
 
 /** Franja corta entre secciones: siempre a un toque de entrar. */
 export function BandaEntrar({ frase }: { frase: string }) {
+  // Con sesión iniciada no tiene sentido invitar a entrar cada dos secciones.
+  if (useSesion()) return null;
   return (
     <div className="border-b border-linea bg-tinta">
       <div className="wrap flex flex-col items-stretch gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">

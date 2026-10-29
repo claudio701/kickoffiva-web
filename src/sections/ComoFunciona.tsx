@@ -15,7 +15,7 @@ const PASOS = [
     n: "3",
     titulo: "El sistema declara. Y si algo se tuerce, entran los humanos.",
     texto:
-      "Tu F29 queda declarado y pagado en fecha, todos los meses. Y si aparece una multa, una anotación o una fiscalización, no te llega una alerta para que te arregles solo: el caso lo toma el equipo tributario de Kickoff, con garantía de 10 días hábiles.",
+      "Con el Plan a Todo Evento, tu F29 queda declarado en fecha todos los meses (sin el Plan, te avisamos cuánto pagar y hasta cuándo). Y si aparece una multa, una anotación o una fiscalización, no te llega una alerta para que te arregles solo: el caso lo toma el equipo tributario de Kickoff, con garantía de 10 días hábiles.",
   },
 ];
 

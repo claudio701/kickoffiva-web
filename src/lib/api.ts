@@ -99,8 +99,17 @@ export function getToken(): string | null {
   }
 }
 
+function avisarSesion(): void {
+  try {
+    window.dispatchEvent(new Event("kickoffiva-sesion"));
+  } catch {
+    /* fuera del navegador */
+  }
+}
+
 function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  avisarSesion();
 }
 
 function setStoredUser(user: Usuario): void {
@@ -115,6 +124,7 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(COMPANY_KEY);
+  avisarSesion();
 }
 
 /** Usuario de la sesión actual (cacheado al login/register; el contrato no expone /me). */
@@ -186,7 +196,9 @@ async function errorMessage(res: Response): Promise<string> {
   } catch {
     /* cuerpo no-JSON */
   }
-  return `Error del servidor (${res.status})`;
+  return res.status >= 500
+    ? "Algo falló de nuestro lado. Intenta de nuevo en unos minutos."
+    : `No pudimos completar la acción (código ${res.status}). Intenta de nuevo.`;
 }
 
 async function apiJson<T>(
@@ -263,6 +275,12 @@ export function logout(): void {
 }
 
 // ─── Cierre mensual ─────────────────────────────────────────────────────────
+
+/** Cierre de un mes específico ("YYYY-MM"). */
+export async function getCierre(periodo: string): Promise<CierreActual> {
+  // GET /api/cierre/:periodo (Bearer)
+  return apiJson<CierreActual>(`/api/cierre/${encodeURIComponent(periodo)}`);
+}
 
 export async function getCierreActual(): Promise<CierreActual> {
   // GET /api/cierre/actual (Bearer)

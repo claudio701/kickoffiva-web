@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clp, WHATSAPP_MANDATARIO_URL } from "../config";
+import { clp, waUrl, WHATSAPP_MANDATARIO_URL } from "../config";
 import {
   ApiError,
   crearEmpresa,
   descargarLibro,
   getActiveCompanyId,
-  getCierreActual,
+  getCierre,
   getEmpresa,
   getEmpresas,
   getMe,
@@ -25,9 +25,10 @@ import {
   type Usuario,
 } from "../lib/api";
 import { rutValido } from "../lib/rut";
-import { mesLargo, tasaPpmTexto } from "../lib/formato";
+import { mesLargo, moverMes, tasaPpmTexto, vencimientoF29 } from "../lib/formato";
 import Turnstile, { TURNSTILE_ACTIVO } from "../components/Turnstile";
 import { abrirAsistente } from "../lib/asistente";
+import { EVENTO_MODO } from "../lib/sesion";
 import { leerCalcGuardada } from "./Calculadora";
 
 const ESTADO_STYLES: Record<EstadoCierre, string> = {
@@ -87,6 +88,8 @@ export default function MiIva() {
     tokenRestablecer ? "restablecer" : "normal"
   );
   const [recuperarMsg, setRecuperarMsg] = useState<string | null>(null);
+  const [cuentaError, setCuentaError] = useState<string | null>(null);
+  const [reintentoCuenta, setReintentoCuenta] = useState(0);
   const [verClaveSii, setVerClaveSii] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -149,13 +152,29 @@ export default function MiIva() {
     setCierreCargando(true);
     setCierreError(null);
     try {
-      setCierre(await getCierreActual());
+      // El mismo mes que eligió la persona (antes siempre era el mes en curso).
+      setCierre(await getCierre(periodo));
     } catch (e) {
-      setCierreError(manejarError(e, "No pudimos cargar tu cierre del mes."));
+      setCierreError(manejarError(e, "No pudimos cargar tu IVA de ese mes."));
     } finally {
       setCierreCargando(false);
     }
-  }, [manejarError]);
+  }, [manejarError, periodo]);
+
+  // "Entrar" del encabezado abre "Ya tengo cuenta"; "Entrar y probar", "Soy nuevo".
+  useEffect(() => {
+    const cambiar = (ev: Event) => {
+      const m = (ev as CustomEvent).detail;
+      if (m === "login" || m === "register") {
+        setModo(m);
+        setVista("normal");
+        setAuthError(null);
+        setErroresRegistro({});
+      }
+    };
+    window.addEventListener(EVENTO_MODO, cambiar);
+    return () => window.removeEventListener(EVENTO_MODO, cambiar);
+  }, []);
 
   // Al entrar o crear la cuenta, la sección cambia de alto: llevamos a la persona
   // al comienzo de su cuenta para que no quede mirando otra parte de la página.
@@ -180,14 +199,23 @@ export default function MiIva() {
         const activa = lista.find((e) => e.id === guardada)?.id ?? lista[0]?.id ?? null;
         setEmpresaActiva(activa);
         setActiveCompanyId(activa);
-      } catch {
-        if (!cancel) setEmpresas([]);
+      } catch (e) {
+        if (cancel) return;
+        if (e instanceof ApiError && e.status === 401) {
+          // Sesión vencida: volver a entrar (no pedirle crear la empresa de nuevo).
+          setAutenticado(false);
+          setUsuario(null);
+          setModo("login");
+          setAuthError("Tu sesión se cerró por seguridad. Vuelve a entrar.");
+        } else {
+          setCuentaError("No pudimos cargar tu cuenta. Revisa tu internet e intenta de nuevo.");
+        }
       }
     })();
     return () => {
       cancel = true;
     };
-  }, [autenticado]);
+  }, [autenticado, reintentoCuenta]);
 
   // Cargar cierre + empresa cada vez que cambia la empresa activa.
   useEffect(() => {
@@ -255,7 +283,15 @@ export default function MiIva() {
     if (modo === "register") {
       const errs = validarRegistro();
       setErroresRegistro(errs);
-      if (Object.keys(errs).length > 0) return;
+      if (Object.keys(errs).length > 0) {
+        // Llevar a la persona al primer dato que falta (en celular puede quedar fuera de vista).
+        requestAnimationFrame(() => {
+          const campo = document.querySelector<HTMLInputElement>('#mi-iva [aria-invalid="true"]');
+          campo?.scrollIntoView({ block: "center" });
+          campo?.focus();
+        });
+        return;
+      }
     }
 
     if (TURNSTILE_ACTIVO && !captchaToken) {
@@ -288,11 +324,15 @@ export default function MiIva() {
         // Ya tiene cuenta: lo pasamos a "Ya tengo cuenta" con su correo escrito.
         setModo("login");
         setPassword("");
-        setAuthError(`${e.message} Si no recuerdas la contraseña, toca "¿Olvidaste tu contraseña?".`);
+        setAuthError(
+          `Ya tienes una cuenta con ese ${/RUT/.test(e.message) ? "RUT" : "correo"}. Escribe tu contraseña aquí abajo para entrar. Si no la recuerdas, toca "¿Olvidaste tu contraseña?".`
+        );
         return;
       }
       setAuthError(
-        e instanceof ApiError && e.status === 401 && modo === "login"
+        e instanceof ApiError && e.status === 401 && modo === "login" && e.message !== "Credenciales inválidas"
+          ? e.message // p.ej. "Ese RUT está en más de una cuenta. Entra con tu correo."
+          : e instanceof ApiError && e.status === 401 && modo === "login"
           ? "El RUT o correo, o la contraseña, no coinciden. Si no la recuerdas, toca \"¿Olvidaste tu contraseña?\"."
           : e instanceof ApiError && e.status !== 401
           ? e.message
@@ -354,6 +394,7 @@ export default function MiIva() {
     setSyncCargando(true);
     setSyncMsg(null);
     setSiiError(null);
+    setSiiOk(null);
     try {
       const r = await sincronizarSii(periodo);
       setSyncMsg(
@@ -362,7 +403,12 @@ export default function MiIva() {
       setEmpresa(await getEmpresa());
       await cargarCierre();
     } catch (e) {
-      setSiiError(manejarError(e, "No pudimos traer tus facturas desde el SII. Intenta de nuevo en unos minutos o escríbenos por WhatsApp."));
+      const msg = manejarError(e, "No pudimos traer tus facturas desde el SII. Intenta de nuevo en unos minutos o escríbenos por WhatsApp.");
+      setSiiError(
+        /rechazadas/i.test(msg)
+          ? "El SII no aceptó tu RUT o tu clave. Revisa que sean los mismos con que entras a sii.cl y guárdalos de nuevo aquí abajo."
+          : msg
+      );
     } finally {
       setSyncCargando(false);
     }
@@ -506,15 +552,6 @@ export default function MiIva() {
       {siiConectado ? (
         <div className="mt-4">
           <p className="text-base text-cancha">✓ Tu clave del SII está guardada y protegida.</p>
-          <label className="mt-5 block">
-            <span className={labelTxt}>¿De qué mes?</span>
-            <input
-              type="month"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-              className={inputCls}
-            />
-          </label>
           <button
             type="button"
             disabled={syncCargando || !periodo}
@@ -523,30 +560,16 @@ export default function MiIva() {
           >
             {syncCargando ? "Trayendo tus facturas… (puede tardar 1 minuto)" : `Traer mis facturas de ${mesLargo(periodo)}`}
           </button>
+          <p className={ayudaTxt}>Para otro mes, cámbialo arriba con los botones ‹ y ›.</p>
           {mensajeError(siiError)}
           {mensajeOk(syncMsg)}
-        </div>
-      ) : (
-        <p className="mt-3 text-base leading-relaxed text-humo">
-          Con tu RUT y tu clave del SII traemos solas tus facturas de compra y venta, y
-          calculamos lo que pagas. Tú no subes nada.
-        </p>
-      )}
-
-      {/* Mensaje de seguridad: siempre visible, antes de pedir la clave */}
-      <div className="mt-6 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-4">
-        <p className="text-base font-semibold text-papel">🔒 Tu clave queda guardada bajo llave</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-humo">
-          Se guarda cifrada con el mismo estándar que usan los bancos (AES-256). Nadie del
-          equipo puede verla y nunca se muestra en pantalla. Solo la usamos para traer tus
-          facturas del SII.
-        </p>
-      </div>
-
-      <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-6 space-y-5">
-        {siiConectado && (
-          <p className="text-base font-semibold text-papel">¿Cambiaste tu clave en el SII? Guárdala de nuevo:</p>
-        )}
+          {mensajeOk(siiOk)}
+          {/* Ya conectado: el formulario queda plegado para no recargar la pantalla */}
+          <details className="mt-6 rounded-xl border border-linea p-4">
+            <summary className="min-h-[44px] cursor-pointer py-2 text-base font-semibold text-papel">
+              ¿Cambiaste tu clave del SII? Guárdala de nuevo
+            </summary>
+            <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-6 space-y-5">
         <label className="block">
           <span className={labelTxt}>RUT con que entras al SII</span>
           <input
@@ -555,10 +578,10 @@ export default function MiIva() {
             autoComplete="off"
             value={rutSii}
             onChange={(e) => setRutSii(e.target.value)}
-            placeholder="Ejemplo: 12.345.678-5"
+            aria-describedby="ayuda-rut-sii"
             className={inputCls}
           />
-          <p className={ayudaTxt}>El mismo RUT que escribes cuando entras a sii.cl.</p>
+          <p id="ayuda-rut-sii" className={ayudaTxt}>El mismo RUT que escribes cuando entras a sii.cl. Ejemplo: 12.345.678-5</p>
         </label>
         <label className="block">
           <span className={labelTxt}>Clave del SII</span>
@@ -575,7 +598,7 @@ export default function MiIva() {
               type="button"
               onClick={() => setVerClaveSii((v) => !v)}
               aria-pressed={verClaveSii}
-              className="min-h-[52px] shrink-0 rounded-xl border-2 border-linea px-4 text-base text-papel hover:border-humo"
+              className="min-h-[52px] shrink-0 rounded-xl border-2 border-humo/60 px-4 text-base text-papel hover:border-humo"
             >
               {verClaveSii ? "Ocultar" : "Ver"}
             </button>
@@ -586,8 +609,66 @@ export default function MiIva() {
           {siiCargando ? "Guardando…" : siiConectado ? "Guardar clave nueva" : "Guardar y conectar"}
         </button>
       </form>
-      {!siiConectado && mensajeError(siiError)}
-      {mensajeOk(siiOk)}
+          </details>
+        </div>
+      ) : (
+        <>
+          <p className="mt-3 text-base leading-relaxed text-humo">
+            Con tu RUT y tu clave del SII traemos solas tus facturas de compra y venta, y
+            calculamos lo que pagas. Tú no subes nada.
+          </p>
+          {/* Mensaje de seguridad: siempre visible antes de pedir la clave */}
+          <div className="mt-6 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-4">
+            <p className="text-base font-semibold text-papel">🔒 Tu clave queda guardada bajo llave</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-humo">
+              Se guarda cifrada, como en los bancos. Nadie del equipo puede verla y nunca se
+              muestra en pantalla. Solo la usamos para traer tus facturas del SII.
+            </p>
+          </div>
+          <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-6 space-y-5">
+        <label className="block">
+          <span className={labelTxt}>RUT con que entras al SII</span>
+          <input
+            type="text"
+            required
+            autoComplete="off"
+            value={rutSii}
+            onChange={(e) => setRutSii(e.target.value)}
+            aria-describedby="ayuda-rut-sii"
+            className={inputCls}
+          />
+          <p id="ayuda-rut-sii" className={ayudaTxt}>El mismo RUT que escribes cuando entras a sii.cl. Ejemplo: 12.345.678-5</p>
+        </label>
+        <label className="block">
+          <span className={labelTxt}>Clave del SII</span>
+          <div className="flex gap-2">
+            <input
+              type={verClaveSii ? "text" : "password"}
+              required
+              autoComplete="off"
+              value={claveSii}
+              onChange={(e) => setClaveSii(e.target.value)}
+              className={inputCls}
+            />
+            <button
+              type="button"
+              onClick={() => setVerClaveSii((v) => !v)}
+              aria-pressed={verClaveSii}
+              className="min-h-[52px] shrink-0 rounded-xl border-2 border-humo/60 px-4 text-base text-papel hover:border-humo"
+            >
+              {verClaveSii ? "Ocultar" : "Ver"}
+            </button>
+          </div>
+          <p className={ayudaTxt}>La misma clave con que entras a sii.cl.</p>
+        </label>
+        <button type="submit" disabled={siiCargando} className={siiConectado ? btnSecundario : btnPrimario}>
+          {siiCargando ? "Guardando…" : siiConectado ? "Guardar clave nueva" : "Guardar y conectar"}
+        </button>
+      </form>
+          {mensajeError(siiError)}
+          {mensajeOk(siiOk)}
+        </>
+      )}
 
       {/* Alternativa sin entregar la clave */}
       <details className="mt-8 rounded-xl border border-linea p-4">
@@ -648,6 +729,16 @@ export default function MiIva() {
                     />
                   </label>
                   {mensajeError(authError)}
+                  {authError && (
+                    <a
+                      href={waUrl("Hola, no puedo entrar a mi cuenta de KickoffIVA y necesito ayuda.")}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={btnSecundario}
+                    >
+                      Pedir ayuda por WhatsApp
+                    </a>
+                  )}
                   <button type="submit" disabled={authCargando} className={btnPrimario}>
                     {authCargando ? "Enviando…" : "Enviarme el link"}
                   </button>
@@ -698,6 +789,29 @@ export default function MiIva() {
                   {authCargando ? "Guardando…" : "Guardar y entrar"}
                 </button>
               </form>
+              {/* Si el link venció o ya se usó, que haya salida en esta misma pantalla */}
+              <button
+                type="button"
+                onClick={() => {
+                  setVista("recuperar");
+                  setAuthError(null);
+                  setRecuperarMsg(null);
+                }}
+                className={`${btnSecundario} mt-4 sm:w-full`}
+              >
+                Pedir un link nuevo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVista("normal");
+                  setModo("login");
+                  setAuthError(null);
+                }}
+                className="mt-3 w-full min-h-[44px] text-base text-humo underline underline-offset-4 hover:text-papel"
+              >
+                ← Volver a entrar
+              </button>
               {ayuda}
             </div>
           ) : !autenticado ? (
@@ -873,6 +987,23 @@ export default function MiIva() {
               )}
               {ayuda}
             </div>
+          ) : cuentaError ? (
+            /* ── No se pudo cargar la cuenta: reintentar, nunca pedir crear la empresa ── */
+            <div className={tarjeta}>
+              {mensajeError(cuentaError)}
+              <button
+                type="button"
+                onClick={() => {
+                  setCuentaError(null);
+                  setEmpresas(null);
+                  setReintentoCuenta((n) => n + 1);
+                }}
+                className={`${btnPrimario} mt-4`}
+              >
+                Intentar de nuevo
+              </button>
+              {ayuda}
+            </div>
           ) : empresas === null ? (
             /* ── Estado: cargando cuenta ──────────────────────────── */
             <div className={tarjeta}>
@@ -987,9 +1118,33 @@ export default function MiIva() {
               <div className={tarjeta}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-display text-2xl font-semibold text-papel">
-                    {cierre ? `Tu IVA de ${mesLargo(cierre.periodo)}` : "Tu IVA del mes"}
+                    Tu IVA de {mesLargo(periodo)}
                   </h3>
                   {cierre && estadoBadge(cierre.estado)}
+                </div>
+
+                {/* Un solo selector de mes para todo: resultado, facturas y descargas */}
+                <div className="mt-4 flex items-center gap-2" role="group" aria-label="Elegir mes">
+                  <button
+                    type="button"
+                    onClick={() => setPeriodo((p) => moverMes(p, -1))}
+                    aria-label="Mes anterior"
+                    className="min-h-[48px] min-w-[48px] rounded-full border-2 border-humo/60 px-3 text-xl text-papel hover:border-cancha"
+                  >
+                    ‹
+                  </button>
+                  <p className="flex-1 text-center text-lg font-semibold capitalize text-papel" aria-live="polite">
+                    {mesLargo(periodo)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPeriodo((p) => moverMes(p, 1))}
+                    disabled={periodo >= periodoActual()}
+                    aria-label="Mes siguiente"
+                    className="min-h-[48px] min-w-[48px] rounded-full border-2 border-humo/60 px-3 text-xl text-papel hover:border-cancha disabled:opacity-30"
+                  >
+                    ›
+                  </button>
                 </div>
 
                 {cierreCargando ? (
@@ -1020,11 +1175,23 @@ export default function MiIva() {
                     </div>
                   ) : (
                     <>
-                      <p className="mt-5 text-base text-humo">Lo que pagas este mes</p>
+                      <p className="mt-5 text-base text-humo">Lo que debes pagar por {mesLargo(cierre.periodo)}</p>
                       <p className="mt-1 font-display font-bold text-5xl sm:text-6xl text-cancha leading-none">
                         {clp(cierre.totalAPagar)}
                       </p>
                       <p className="mt-2 text-sm text-humo">IVA + PPM, con tus facturas del SII.</p>
+                      <p className="mt-4 rounded-xl border border-linea bg-panel px-4 py-3 text-base text-papel">
+                        📅 Se declara y paga en el SII (Formulario 29) a más tardar el{" "}
+                        <strong>{vencimientoF29(cierre.periodo)}</strong> si emites factura electrónica
+                        (si no, el {vencimientoF29(cierre.periodo, 12)}). <strong>Este monto todavía no está pagado.</strong>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={abrirAsistente}
+                        className="mt-3 min-h-[44px] text-base font-semibold text-cancha underline underline-offset-4"
+                      >
+                        ¿Cómo lo pago? Pregúntale a Kiko
+                      </button>
 
                       <dl className="mt-7 space-y-4 border-t border-linea pt-6 text-base">
                         <div className="flex justify-between gap-4">

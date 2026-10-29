@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { waUrl } from "../config";
 import { EVENTO_ABRIR_ASISTENTE } from "../lib/asistente";
 
@@ -30,9 +30,21 @@ const TEMAS: Tema[] = [
     accion: { texto: "Llévame a crear mi cuenta", href: "#mi-iva" },
   },
   {
+    pregunta: "¿Cuándo y cómo pago el IVA?",
+    respuesta:
+      "El IVA de cada mes se declara y paga el mes siguiente en sii.cl, con el Formulario 29: hasta el día 20 si emites factura electrónica (si no, hasta el 12). Entras a sii.cl con tu RUT y clave, vas a Impuestos mensuales, declaras el F29 y pagas con tu banco. Si prefieres que lo hagamos nosotros, eso es el Plan a Todo Evento.",
+    accion: { texto: "Ver el Plan", href: "#plan" },
+  },
+  {
+    pregunta: "Olvidé mi contraseña de KickoffIVA",
+    respuesta:
+      "Toca \"Entrar\", luego \"Ya tengo cuenta\" y abajo \"¿Olvidaste tu contraseña?\". Te mandamos un correo con un link para crear una nueva.",
+    accion: { texto: "Ir a entrar", href: "#mi-iva" },
+  },
+  {
     pregunta: "No sé mi clave del SII",
     respuesta:
-      "Es la misma clave con que entras a sii.cl. Si no la tienes o se te olvidó, en sii.cl puedes obtener una nueva con tu cédula de identidad. Si te enredas, te ayudamos por WhatsApp.",
+      "Es la misma clave con que entras a sii.cl. Si no la tienes o se te olvidó, en la página de ingreso de sii.cl está la opción para recuperarla o crear una nueva con tu cédula de identidad. Si te enredas, te ayudamos por WhatsApp.",
     accion: { texto: "Ir a sii.cl", href: "https://www.sii.cl", externo: true },
   },
   {
@@ -73,6 +85,38 @@ export default function Asistente() {
   const [abierto, setAbierto] = useState(false);
   const [tema, setTema] = useState<Tema | null>(null);
   const [saludo, setSaludo] = useState(false);
+  // Sobre el área de entrar/cuenta el botón flotante tapaba campos: ahí se esconde
+  // (los botones "¿Te complicaste?" de esa sección igual abren a Kiko).
+  const [sobreCuenta, setSobreCuenta] = useState(false);
+  const dialogo = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const revisar = () => {
+      const r = document.getElementById("mi-iva")?.getBoundingClientRect();
+      setSobreCuenta(r ? r.top < window.innerHeight * 0.85 && r.bottom > window.innerHeight * 0.15 : false);
+    };
+    revisar();
+    window.addEventListener("scroll", revisar, { passive: true });
+    window.addEventListener("resize", revisar);
+    return () => {
+      window.removeEventListener("scroll", revisar);
+      window.removeEventListener("resize", revisar);
+    };
+  }, []);
+
+  // Al abrir: foco dentro del diálogo; Escape lo cierra.
+  useEffect(() => {
+    if (!abierto) return;
+    dialogo.current?.focus();
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAbierto(false);
+        setTema(null);
+      }
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [abierto]);
 
   // Se abre desde cualquier botón "¿Te complicaste?" del sitio.
   useEffect(() => {
@@ -93,7 +137,8 @@ export default function Asistente() {
     } catch {
       /* storage bloqueado: saludamos igual */
     }
-    if (visto) return;
+    // En celular el globo tapa contenido: solo saludamos en pantallas grandes.
+    if (visto || window.innerWidth < 640) return;
     const mostrar = setTimeout(() => {
       setSaludo(true);
       try {
@@ -119,9 +164,12 @@ export default function Asistente() {
     <div className="fixed right-4 bottom-24 sm:bottom-6 z-[60] flex flex-col items-end gap-3">
       {abierto && (
         <div
+          ref={dialogo}
+          tabIndex={-1}
           role="dialog"
+          aria-modal="false"
           aria-label={`${NOMBRE}, tu asistente`}
-          className="w-[min(22rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl border border-linea bg-panel p-5 shadow-2xl"
+          className="w-[min(22rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto rounded-2xl outline-none border border-linea bg-panel p-5 shadow-2xl"
         >
           <div className="flex items-start gap-3">
             <Personaje className="h-12 w-12 shrink-0" />
@@ -201,6 +249,7 @@ export default function Asistente() {
 
       <button
         type="button"
+        hidden={sobreCuenta && !abierto}
         onClick={() => (abierto ? cerrar() : setAbierto(true))}
         aria-label={abierto ? `Cerrar a ${NOMBRE}` : `Abrir a ${NOMBRE}, tu asistente`}
         aria-expanded={abierto}

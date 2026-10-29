@@ -76,15 +76,22 @@ export default function Calculadora() {
     return { iva, estimado, total };
   }, [ventas, meses, pagadas]);
 
-  // Guardar los valores para que Mi IVA los retome al registrarse.
+  // Guardar los valores para que Mi IVA los retome al registrarse, solo si la
+  // persona movió algo (si no, le atribuiríamos números que nunca escribió).
+  const [tocado, setTocado] = useState(false);
   useEffect(() => {
+    if (!tocado) return;
     try {
       const data: CalcGuardada = { ventas, meses, pagadas, ts: Date.now() };
       localStorage.setItem(CALC_STORAGE_KEY, JSON.stringify(data));
     } catch {
       /* storage no disponible */
     }
-  }, [ventas, meses, pagadas]);
+  }, [ventas, meses, pagadas, tocado]);
+
+  const cambiarVentas = (v: number) => { setTocado(true); setVentas(v); };
+  const cambiarMeses = (v: number) => { setTocado(true); setMeses(v); };
+  const cambiarPagadas = (v: number) => { setTocado(true); setPagadas(v); };
 
   return (
     <section id="calculadora" className="border-b border-linea bg-panel/40">
@@ -108,11 +115,11 @@ export default function Calculadora() {
                 max={40000000}
                 step={100000}
                 value={ventas}
-                onChange={(e) => setVentas(+e.target.value)}
+                onChange={(e) => cambiarVentas(+e.target.value)}
                 className="mt-3 w-full accent-cancha"
                 aria-label="Ventas mensuales aproximadas"
               />
-              <Ajustar valor={ventas} min={500000} max={40000000} paso={500000} onChange={setVentas} etiqueta="ventas mensuales aprox." />
+              <Ajustar valor={ventas} min={500000} max={40000000} paso={500000} onChange={cambiarVentas} etiqueta="ventas mensuales aprox." />
             </label>
 
             <label className="block">
@@ -126,11 +133,11 @@ export default function Calculadora() {
                 max={12}
                 step={1}
                 value={meses}
-                onChange={(e) => setMeses(+e.target.value)}
+                onChange={(e) => cambiarMeses(+e.target.value)}
                 className="mt-3 w-full accent-cancha"
                 aria-label="Meses con F29 atrasado"
               />
-              <Ajustar valor={meses} min={0} max={12} paso={1} onChange={setMeses} etiqueta="meses con f29 atrasado este año" />
+              <Ajustar valor={meses} min={0} max={12} paso={1} onChange={cambiarMeses} etiqueta="meses con f29 atrasado este año" />
             </label>
 
             <label className="block">
@@ -144,11 +151,11 @@ export default function Calculadora() {
                 max={5000000}
                 step={10000}
                 value={pagadas}
-                onChange={(e) => setPagadas(+e.target.value)}
+                onChange={(e) => cambiarPagadas(+e.target.value)}
                 className="mt-3 w-full accent-cancha"
                 aria-label="Multas ya pagadas"
               />
-              <Ajustar valor={pagadas} min={0} max={5000000} paso={50000} onChange={setPagadas} etiqueta="multas que ya pagaste" />
+              <Ajustar valor={pagadas} min={0} max={5000000} paso={50000} onChange={cambiarPagadas} etiqueta="multas que ya pagaste" />
             </label>
 
             <p className="text-base text-humo leading-relaxed">
@@ -179,7 +186,7 @@ export default function Calculadora() {
               </div>
             </dl>
 
-            <BotonEntrar texto="Entrar y ver mi número real →" className="mt-8" />
+            <BotonEntrar texto="Entrar y ver mi IVA real →" className="mt-8" />
             <BotonConversar className="mt-3" />
             <p className="mt-3 text-center text-sm text-humo">
               Estimación referencial, no constituye asesoría tributaria. Al entrar, tus datos se retoman automáticamente.
