@@ -35,3 +35,16 @@ Este sitio está en **Cloudflare Pages** (functions/ + Cloudflare). Cloudflare t
 protección anti-DDoS: una prueba de carga agresiva puede ser bloqueada o marcada como
 ataque. Mantén la carga moderada, avísale a Cloudflare si vas a cargas altas, o prueba
 sobre un deploy de *preview*/staging. No subas a miles de VUs contra producción.
+
+## Prueba de pico para el lanzamiento (crowdfunding + prensa)
+Un lanzamiento con prensa genera una **llegada de golpe**. Para dimensionarlo:
+- Estima cuántas visitas simultáneas esperas en el peor minuto (p. ej. una nota en un
+  medio grande puede traer cientos de personas a la vez). Usa ese número como `PICO`.
+- Corre el escenario de pico contra un **preview/staging** de Cloudflare Pages:
+  ```
+  ESCENARIO=pico PICO=300 URL=https://<preview>.pages.dev k6 run loadtest/carga-kickoffiva.js
+  ```
+- Si a ese `PICO` los errores (http_req_failed) se mantienen bajos y el p95 < 1,5 s,
+  el sitio aguanta. Si no, ahí está el techo: conviene cache/CDN de Cloudflare al máximo,
+  páginas estáticas, y no depender de funciones serverless en el home.
+- Sube el `PICO` de a poco (200 → 300 → 500) para encontrar el límite, sin saltar a miles.
