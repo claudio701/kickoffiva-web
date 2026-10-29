@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { clp, WHATSAPP_MANDATARIO_URL } from "../config";
+import { clp, waUrl, WHATSAPP_MANDATARIO_URL } from "../config";
 import {
   ApiError,
   crearEmpresa,
@@ -23,6 +23,7 @@ import {
   type Usuario,
 } from "../lib/api";
 import { rutValido } from "../lib/rut";
+import { mesLargo, tasaPpmTexto } from "../lib/formato";
 import { leerCalcGuardada } from "./Calculadora";
 
 const ESTADO_STYLES: Record<EstadoCierre, string> = {
@@ -32,16 +33,16 @@ const ESTADO_STYLES: Record<EstadoCierre, string> = {
 };
 
 const ESTADO_LABELS: Record<EstadoCierre, string> = {
-  listo: "Listo",
+  listo: "✓ Calculado",
   pendiente: "Pendiente",
-  sin_datos: "Sin datos",
+  sin_datos: "Faltan tus facturas",
 };
 
 function estadoBadge(estado: EstadoCierre) {
   const cls = ESTADO_STYLES[estado] ?? "bg-panel text-humo border-linea";
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] ${cls}`}
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${cls}`}
     >
       {ESTADO_LABELS[estado] ?? estado}
     </span>
@@ -52,6 +53,8 @@ function periodoActual(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+const WHATSAPP_AYUDA_URL = waUrl("Hola, estoy en Mi IVA y necesito ayuda para seguir.");
 
 type Modo = "login" | "register";
 
@@ -66,7 +69,10 @@ export default function MiIva() {
   const [autenticado, setAutenticado] = useState(() => getToken() !== null);
 
   // ── Login / Registro ──
-  const [modo, setModo] = useState<Modo>("login");
+  // La mayoría de quienes llegan aquí son nuevos: si nunca entró en este equipo, "Soy nuevo".
+  const [modo, setModo] = useState<Modo>(() => (getMe() ? "login" : "register"));
+  const [verPassword, setVerPassword] = useState(false);
+  const [verClaveSii, setVerClaveSii] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
@@ -175,11 +181,11 @@ export default function MiIva() {
     ev.preventDefault();
     setEmpresaError(null);
     if (!nuevaNombre.trim()) {
-      setEmpresaError("Ingresa el nombre de la empresa.");
+      setEmpresaError("Escribe el nombre de tu negocio.");
       return;
     }
     if (!rutValido(nuevaRut)) {
-      setEmpresaError("RUT inválido. Revisa el dígito verificador (formato 12345678-9).");
+      setEmpresaError("El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-7).");
       return;
     }
     setEmpresaCargando(true);
@@ -200,13 +206,13 @@ export default function MiIva() {
 
   const validarRegistro = (): ErroresRegistro => {
     const errs: ErroresRegistro = {};
-    if (!nombre.trim()) errs.nombre = "Ingresa tu nombre.";
+    if (!nombre.trim()) errs.nombre = "Escribe tu nombre.";
     if (!email.trim()) {
-      errs.email = "Ingresa tu correo.";
+      errs.email = "Escribe tu correo.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errs.email = "Correo inválido.";
+      errs.email = "Revisa el correo: debe tener una @ (ejemplo: rosa@gmail.com).";
     }
-    if (password.length < 8) errs.password = "Mínimo 8 caracteres.";
+    if (password.length < 8) errs.password = "La contraseña debe tener al menos 8 letras o números.";
     return errs;
   };
 
@@ -267,18 +273,18 @@ export default function MiIva() {
     setSiiError(null);
     setSiiOk(null);
     if (!rutValido(rutSii)) {
-      setSiiError("RUT inválido. Revisa el dígito verificador (formato 12345678-9).");
+      setSiiError("El RUT no es válido. Revisa el número que va después del guion (ejemplo: 12.345.678-5).");
       return;
     }
     if (claveSii.length < 4) {
-      setSiiError("La clave tributaria debe tener al menos 4 caracteres.");
+      setSiiError("La clave del SII es muy corta. Revisa que esté completa.");
       return;
     }
     setSiiCargando(true);
     try {
       await guardarCredencialesSii(rutSii.trim(), claveSii);
       setClaveSii(""); // nunca la retenemos en pantalla
-      setSiiOk("Clave guardada cifrada. Ya puedes sincronizar tus libros.");
+      setSiiOk("Listo, tu clave quedó guardada y protegida. Ahora toca el botón para traer tus facturas.");
       setEmpresa(await getEmpresa());
     } catch (e) {
       setSiiError(manejarError(e, "No pudimos guardar tu clave. Intenta de nuevo."));
@@ -294,11 +300,11 @@ export default function MiIva() {
     try {
       const r = await sincronizarSii(periodo);
       setSyncMsg(
-        `Sincronizado: ${r.compras.n} compras y ${r.ventas.n} ventas importadas de ${r.periodo}.`
+        `Listo: trajimos ${r.compras.n} ${r.compras.n === 1 ? "factura de compra" : "facturas de compra"} y ${r.ventas.n} ${r.ventas.n === 1 ? "factura de venta" : "facturas de venta"} de ${mesLargo(periodo)}.`
       );
       await cargarCierre();
     } catch (e) {
-      setSiiError(manejarError(e, "No pudimos sincronizar con el SII."));
+      setSiiError(manejarError(e, "No pudimos traer tus facturas desde el SII. Intenta de nuevo en unos minutos o escríbenos por WhatsApp."));
     } finally {
       setSyncCargando(false);
     }
@@ -322,10 +328,174 @@ export default function MiIva() {
     setErroresRegistro({});
   };
 
+  // Estilos pensados para cualquier persona: letra grande, contraste alto,
+  // botones de al menos 48px de alto y ayudas en texto normal (no mono chico).
   const inputCls =
-    "w-full rounded-xl border border-linea bg-tinta px-4 py-3 text-base text-papel placeholder:text-humo/60 outline-none focus:border-cancha/60 focus:ring-2 focus:ring-cancha/20 transition";
-  const inputErrorCls = "border-multa/60 focus:border-multa/70 focus:ring-multa/20";
-  const errorTxt = "mt-1.5 font-mono text-[11px] text-multa";
+    "w-full rounded-xl border-2 border-linea bg-tinta px-4 py-3.5 text-lg text-papel placeholder:text-humo outline-none focus:border-cancha focus:ring-2 focus:ring-cancha/30 transition";
+  const inputErrorCls = "border-multa focus:border-multa focus:ring-multa/30";
+  const labelTxt = "mb-2 block text-base font-semibold text-papel";
+  const ayudaTxt = "mt-2 text-sm leading-relaxed text-humo";
+  const errorTxt = "mt-2 text-base font-medium text-multa";
+  const btnPrimario =
+    "inline-flex min-h-[52px] w-full items-center justify-center rounded-full bg-cancha px-7 py-3.5 text-lg font-semibold text-tinta hover:bg-cancha-dim transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  const btnSecundario =
+    "inline-flex min-h-[48px] w-full items-center justify-center rounded-full border-2 border-cancha/60 px-6 py-3 text-base font-semibold text-cancha hover:bg-cancha/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto";
+  const tarjeta = "rounded-2xl border border-linea bg-tinta p-5 sm:p-8";
+
+  /** Etiqueta "Paso N de 3" para que la persona sepa cuánto le falta. */
+  const paso = (n: number, texto: string) => (
+    <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-cancha/15 px-4 py-1.5 text-sm font-semibold text-cancha">
+      Paso {n} de 3 · {texto}
+    </p>
+  );
+
+  /** Ayuda humana siempre a un toque. */
+  const ayuda = (
+    <a
+      href={WHATSAPP_AYUDA_URL}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-6 flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-linea px-5 py-3 text-base text-papel hover:border-cancha/60 transition-colors"
+    >
+      ¿Te complicaste? Te ayudamos por WhatsApp
+    </a>
+  );
+
+  const mensajeError = (texto: string | null) =>
+    texto ? (
+      <p role="alert" className="mt-4 rounded-xl border border-multa/50 bg-multa/10 px-4 py-3 text-base font-medium text-multa">
+        ⚠️ {texto}
+      </p>
+    ) : null;
+
+  const mensajeOk = (texto: string | null) =>
+    texto ? (
+      <p role="status" className="mt-4 rounded-xl border border-cancha/50 bg-cancha/10 px-4 py-3 text-base font-medium text-cancha">
+        ✓ {texto}
+      </p>
+    ) : null;
+
+  const siiConectado = Boolean(empresa?.siiConfigurado);
+
+  /* ── Tarjeta: conexión con el SII (paso 3) ───────────────────────────── */
+  const tarjetaSii = (
+    <div id="conectar-sii" className={tarjeta}>
+      {!siiConectado && paso(3, "Conecta el SII")}
+      <h3 className="font-display text-2xl font-semibold text-papel">
+        {siiConectado ? "Tus facturas del SII" : "Trae tus facturas desde el SII"}
+      </h3>
+
+      {siiConectado ? (
+        <div className="mt-4">
+          <p className="text-base text-cancha">✓ Tu clave del SII está guardada y protegida.</p>
+          <label className="mt-5 block">
+            <span className={labelTxt}>¿De qué mes?</span>
+            <input
+              type="month"
+              value={periodo}
+              onChange={(e) => setPeriodo(e.target.value)}
+              className={inputCls}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={syncCargando || !periodo}
+            onClick={() => void onSincronizar()}
+            className={`${btnPrimario} mt-4`}
+          >
+            {syncCargando ? "Trayendo tus facturas… (puede tardar 1 minuto)" : `Traer mis facturas de ${mesLargo(periodo)}`}
+          </button>
+          {mensajeError(siiError)}
+          {mensajeOk(syncMsg)}
+        </div>
+      ) : (
+        <p className="mt-3 text-base leading-relaxed text-humo">
+          Con tu RUT y tu clave del SII traemos solas tus facturas de compra y venta, y
+          calculamos lo que pagas. Tú no subes nada.
+        </p>
+      )}
+
+      {/* Mensaje de seguridad: siempre visible, antes de pedir la clave */}
+      <div className="mt-6 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-4">
+        <p className="text-base font-semibold text-papel">🔒 Tu clave queda guardada bajo llave</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-humo">
+          Se guarda cifrada con el mismo estándar que usan los bancos (AES-256). Nadie del
+          equipo puede verla y nunca se muestra en pantalla. Solo la usamos para traer tus
+          facturas del SII.
+        </p>
+      </div>
+
+      <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-6 space-y-5">
+        {siiConectado && (
+          <p className="text-base font-semibold text-papel">¿Cambiaste tu clave en el SII? Guárdala de nuevo:</p>
+        )}
+        <label className="block">
+          <span className={labelTxt}>RUT con que entras al SII</span>
+          <input
+            type="text"
+            required
+            autoComplete="off"
+            value={rutSii}
+            onChange={(e) => setRutSii(e.target.value)}
+            placeholder="Ejemplo: 12.345.678-5"
+            className={inputCls}
+          />
+          <p className={ayudaTxt}>El mismo RUT que escribes cuando entras a sii.cl.</p>
+        </label>
+        <label className="block">
+          <span className={labelTxt}>Clave del SII</span>
+          <div className="flex gap-2">
+            <input
+              type={verClaveSii ? "text" : "password"}
+              required
+              autoComplete="off"
+              value={claveSii}
+              onChange={(e) => setClaveSii(e.target.value)}
+              className={inputCls}
+            />
+            <button
+              type="button"
+              onClick={() => setVerClaveSii((v) => !v)}
+              aria-pressed={verClaveSii}
+              className="min-h-[52px] shrink-0 rounded-xl border-2 border-linea px-4 text-base text-papel hover:border-humo"
+            >
+              {verClaveSii ? "Ocultar" : "Ver"}
+            </button>
+          </div>
+          <p className={ayudaTxt}>La misma clave con que entras a sii.cl.</p>
+        </label>
+        <button type="submit" disabled={siiCargando} className={siiConectado ? btnSecundario : btnPrimario}>
+          {siiCargando ? "Guardando…" : siiConectado ? "Guardar clave nueva" : "Guardar y conectar"}
+        </button>
+      </form>
+      {!siiConectado && mensajeError(siiError)}
+      {mensajeOk(siiOk)}
+
+      {/* Alternativa sin entregar la clave */}
+      <details className="mt-8 rounded-xl border border-linea p-4">
+        <summary className="cursor-pointer text-base font-semibold text-papel">
+          ¿No quieres darnos tu clave? Hay otra forma
+        </summary>
+        <p className="mt-3 text-base leading-relaxed text-humo">
+          Puedes autorizarnos como <strong className="text-papel">mandatario</strong> en el SII. Así
+          entramos con nuestra propia clave y tú puedes quitar el permiso cuando quieras.
+        </p>
+        <ol className="mt-3 space-y-2 text-base leading-relaxed text-humo">
+          <li>1. Entra a sii.cl con tu clave.</li>
+          <li>2. En el menú "Mandatarios", autoriza el RUT que te enviamos por WhatsApp.</li>
+          <li>3. Listo: nosotros hacemos el resto.</li>
+        </ol>
+        <a
+          href={WHATSAPP_MANDATARIO_URL}
+          target="_blank"
+          rel="noreferrer"
+          className={`${btnSecundario} mt-4`}
+        >
+          Pedir el RUT por WhatsApp
+        </a>
+      </details>
+    </div>
+  );
 
   return (
     <section id="mi-iva" className="border-b border-linea bg-panel/40">
@@ -335,199 +505,193 @@ export default function MiIva() {
           Tu IVA del mes, en un solo número
         </h2>
 
-        <div className="mt-10 max-w-2xl">
+        <div className="mt-8 max-w-2xl">
           {!autenticado ? (
             /* ── Estado: sin sesión ─────────────────────────────────── */
-            <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
-              <p className="text-sm text-humo leading-relaxed">
-                {modo === "login"
-                  ? "Clientes KickoffIVA: tu IVA real del mes, calculado con tus libros del SII."
-                  : "Crea tu cuenta y empieza a ver tu IVA del mes calculado con tus libros."}
-              </p>
+            <div className={tarjeta}>
+              {/* Dos botones grandes en vez de un link chico escondido abajo */}
+              <div className="grid grid-cols-2 gap-2 rounded-full border border-linea p-1" role="tablist">
+                {(["register", "login"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="tab"
+                    aria-selected={modo === m}
+                    onClick={() => cambiarModo(m)}
+                    className={`min-h-[48px] rounded-full px-3 text-base font-semibold transition-colors ${
+                      modo === m ? "bg-cancha text-tinta" : "text-papel hover:bg-panel"
+                    }`}
+                  >
+                    {m === "register" ? "Soy nuevo" : "Ya tengo cuenta"}
+                  </button>
+                ))}
+              </div>
 
-              <form method="post" action="#mi-iva" onSubmit={onSubmitAuth} className="mt-6 space-y-4" noValidate={modo === "register"}>
+              <div className="mt-6">
+                {modo === "register" && paso(1, "Crea tu cuenta")}
+                <p className="text-base text-humo leading-relaxed">
+                  {modo === "login"
+                    ? "Entra con tu correo y tu contraseña."
+                    : "Son 3 pasos y toma 2 minutos. No necesitas saber de impuestos."}
+                </p>
+              </div>
+
+              <form method="post" action="#mi-iva" onSubmit={onSubmitAuth} className="mt-6 space-y-5" noValidate={modo === "register"}>
                 {modo === "register" && (
                   <>
                     <label className="block">
-                      <span className="mb-1.5 block text-sm font-medium">Tu nombre</span>
+                      <span className={labelTxt}>Tu nombre</span>
                       <input
                         type="text"
                         required
                         autoComplete="name"
                         value={nombre}
                         onChange={(e) => setNombre(e.target.value)}
-                        placeholder="Ej: Claudio Pérez"
+                        placeholder="Ejemplo: Rosa González"
+                        aria-invalid={Boolean(erroresRegistro.nombre)}
                         className={`${inputCls} ${erroresRegistro.nombre ? inputErrorCls : ""}`}
                       />
-                      {erroresRegistro.nombre ? (
-                        <p role="alert" className={errorTxt}>{erroresRegistro.nombre}</p>
-                      ) : (
-                        <p className="mt-1.5 font-mono text-[11px] text-humo/70">
-                          La cuenta es tuya como persona. Después agregas tu empresa (o varias, si manejas más de una).
-                        </p>
-                      )}
+                      {erroresRegistro.nombre && <p role="alert" className={errorTxt}>{erroresRegistro.nombre}</p>}
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-sm font-medium">
-                        Tu WhatsApp <span className="font-normal text-humo">(opcional)</span>
+                      <span className={labelTxt}>
+                        Tu WhatsApp <span className="font-normal text-humo">(si quieres)</span>
                       </span>
                       <input
                         type="tel"
                         autoComplete="tel"
+                        inputMode="tel"
                         value={telefono}
                         onChange={(e) => setTelefono(e.target.value)}
                         placeholder="+56 9 1234 5678"
                         className={inputCls}
                       />
-                      <p className="mt-1.5 font-mono text-[11px] text-humo/70">
-                        Para avisarte tu IVA del mes antes del día 12. Nunca te enviaremos publicidad.
-                      </p>
+                      <p className={ayudaTxt}>Te avisamos cuánto pagar antes de que venza. Nada de publicidad.</p>
                     </label>
                   </>
                 )}
 
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium">Correo</span>
+                  <span className={labelTxt}>Tu correo</span>
                   <input
                     type="email"
                     required
                     autoComplete="email"
+                    inputMode="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tu@empresa.cl"
-                    className={`${inputCls} ${erroresRegistro.email ? inputErrorCls : ""}`}
+                    placeholder="Ejemplo: rosa@gmail.com"
+                    aria-invalid={Boolean(erroresRegistro.email && modo === "register")}
+                    className={`${inputCls} ${erroresRegistro.email && modo === "register" ? inputErrorCls : ""}`}
                   />
                   {erroresRegistro.email && modo === "register" && (
                     <p role="alert" className={errorTxt}>{erroresRegistro.email}</p>
                   )}
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium">Contraseña</span>
-                  <input
-                    type="password"
-                    required
-                    minLength={modo === "register" ? 8 : undefined}
-                    autoComplete={modo === "register" ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`${inputCls} ${erroresRegistro.password ? inputErrorCls : ""}`}
-                  />
-                  {erroresRegistro.password && modo === "register" && (
+                  <span className={labelTxt}>{modo === "register" ? "Inventa una contraseña" : "Tu contraseña"}</span>
+                  <div className="flex gap-2">
+                    <input
+                      type={verPassword ? "text" : "password"}
+                      required
+                      minLength={modo === "register" ? 8 : undefined}
+                      autoComplete={modo === "register" ? "new-password" : "current-password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      aria-invalid={Boolean(erroresRegistro.password && modo === "register")}
+                      className={`${inputCls} ${erroresRegistro.password && modo === "register" ? inputErrorCls : ""}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVerPassword((v) => !v)}
+                      aria-pressed={verPassword}
+                      className="min-h-[52px] shrink-0 rounded-xl border-2 border-linea px-4 text-base text-papel hover:border-humo"
+                    >
+                      {verPassword ? "Ocultar" : "Ver"}
+                    </button>
+                  </div>
+                  {erroresRegistro.password && modo === "register" ? (
                     <p role="alert" className={errorTxt}>{erroresRegistro.password}</p>
+                  ) : (
+                    modo === "register" && (
+                      <p className={ayudaTxt}>Mínimo 8 letras o números. No es tu clave del SII.</p>
+                    )
                   )}
                 </label>
 
-                {authError && (
-                  <p role="alert" className="font-mono text-xs text-multa">
-                    {authError}
-                  </p>
-                )}
+                {mensajeError(authError)}
 
-                <button
-                  type="submit"
-                  disabled={authCargando}
-                  className="inline-flex w-full justify-center rounded-full bg-cancha px-7 py-3.5 text-base font-semibold text-tinta hover:bg-cancha-dim transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
+                <button type="submit" disabled={authCargando} className={btnPrimario}>
                   {authCargando
                     ? modo === "register"
-                      ? "Creando cuenta…"
-                      : "Ingresando…"
+                      ? "Creando tu cuenta…"
+                      : "Entrando…"
                     : modo === "register"
-                      ? "Crear cuenta →"
-                      : "Ingresar a Mi IVA →"}
+                      ? "Crear mi cuenta"
+                      : "Entrar"}
                 </button>
               </form>
-
-              <p className="mt-6 border-t border-linea pt-5 text-center font-mono text-[11px] text-humo">
-                {modo === "login" ? (
-                  <>
-                    ¿Primera vez?{" "}
-                    <button
-                      type="button"
-                      onClick={() => cambiarModo("register")}
-                      className="text-cancha underline underline-offset-4 hover:text-cancha-dim"
-                    >
-                      Crea tu cuenta
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    ¿Ya tienes cuenta?{" "}
-                    <button
-                      type="button"
-                      onClick={() => cambiarModo("login")}
-                      className="text-cancha underline underline-offset-4 hover:text-cancha-dim"
-                    >
-                      Inicia sesión
-                    </button>
-                  </>
-                )}
-              </p>
+              {ayuda}
             </div>
           ) : empresas === null ? (
             /* ── Estado: cargando cuenta ──────────────────────────── */
-            <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
-              <p className="font-mono text-sm text-humo animate-pulse">Cargando tu cuenta…</p>
+            <div className={tarjeta}>
+              <p className="text-lg text-humo animate-pulse">Cargando tu cuenta…</p>
             </div>
           ) : empresas.length === 0 || mostrarAgregar ? (
             /* ── Estado: agregar empresa (onboarding o adicional) ──── */
-            <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
-              <p className="kicker">
-                {empresas.length === 0 ? "Último paso: agrega tu empresa" : "Agregar otra empresa"}
-              </p>
-              <p className="mt-4 text-sm text-humo leading-relaxed">
+            <div className={tarjeta}>
+              {empresas.length === 0 && paso(2, "Tu negocio")}
+              <h3 className="font-display text-2xl font-semibold text-papel">
+                {empresas.length === 0 ? "¿Cuál es tu negocio?" : "Agregar otro negocio"}
+              </h3>
+              <p className="mt-3 text-base text-humo leading-relaxed">
                 {empresas.length === 0
-                  ? `Listo ${usuario?.nombre ?? ""}, tu cuenta está creada. Ahora agrega la empresa cuyo IVA quieres ver. Si manejas varias, podrás agregarlas todas aquí mismo.`
-                  : "Agrega otra empresa a tu cuenta — podrás cambiar entre ellas cuando quieras."}
+                  ? `Bien${usuario?.nombre ? `, ${usuario.nombre}` : ""}: tu cuenta está lista. Ahora dinos de qué negocio quieres ver el IVA.`
+                  : "Si manejas más de un negocio, agrégalo aquí y cambias entre ellos cuando quieras."}
               </p>
               {calcGuardada && empresas.length === 0 && (
-                <p className="mt-3 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 text-sm text-humo">
-                  ✓ Retomamos tus datos de la calculadora: estimaste ventas de{" "}
-                  <span className="font-mono text-cancha">{clp(calcGuardada.ventas)}</span> al mes.
-                  Agrega tu empresa y sube tus libros reales para ver tu número exacto, no una estimación.
+                <p className="mt-4 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 text-base text-humo">
+                  ✓ En la calculadora pusiste ventas de{" "}
+                  <span className="font-semibold text-cancha">{clp(calcGuardada.ventas)}</span> al mes.
+                  Con tus facturas reales te damos el número exacto.
                 </p>
               )}
 
-              <form method="post" action="#mi-iva" onSubmit={(e) => void onCrearEmpresa(e)} className="mt-6 space-y-4">
+              <form method="post" action="#mi-iva" onSubmit={(e) => void onCrearEmpresa(e)} className="mt-6 space-y-5">
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium">Nombre de la empresa</span>
+                  <span className={labelTxt}>Nombre del negocio</span>
                   <input
                     type="text"
                     required
                     autoComplete="organization"
                     value={nuevaNombre}
                     onChange={(e) => setNuevaNombre(e.target.value)}
-                    placeholder="Empresa SpA"
+                    placeholder="Ejemplo: Panadería Doña Rosa"
                     className={inputCls}
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium">RUT de la empresa</span>
+                  <span className={labelTxt}>RUT del negocio</span>
                   <input
                     type="text"
                     required
+                    autoComplete="off"
                     value={nuevaRut}
                     onChange={(e) => setNuevaRut(e.target.value)}
-                    placeholder="76.123.456-7"
+                    placeholder="Ejemplo: 76.123.456-7"
                     className={inputCls}
                   />
-                  <p className="mt-1.5 font-mono text-[11px] text-humo/70">
-                    El RUT con que facturas (aparece en tu carpeta tributaria del SII). Si trabajas como persona natural con inicio de actividades, usa tu propio RUT.
+                  <p className={ayudaTxt}>
+                    El RUT con que haces tus facturas o boletas. Si trabajas como persona, es tu propio RUT.
                   </p>
                 </label>
 
-                {empresaError && (
-                  <p role="alert" className="font-mono text-xs text-multa">{empresaError}</p>
-                )}
+                {mensajeError(empresaError)}
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="submit"
-                    disabled={empresaCargando}
-                    className="rounded-full bg-cancha px-7 py-3 text-sm font-semibold text-tinta hover:bg-cancha-dim transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {empresaCargando ? "Agregando…" : "Agregar empresa →"}
+                <div className="flex flex-col gap-3">
+                  <button type="submit" disabled={empresaCargando} className={btnPrimario}>
+                    {empresaCargando ? "Guardando…" : empresas.length === 0 ? "Seguir" : "Agregar negocio"}
                   </button>
                   {empresas.length > 0 && (
                     <button
@@ -536,24 +700,23 @@ export default function MiIva() {
                         setMostrarAgregar(false);
                         setEmpresaError(null);
                       }}
-                      className="rounded-full border border-linea px-7 py-3 text-sm text-humo hover:text-papel transition-colors"
+                      className="min-h-[48px] rounded-full border border-linea px-7 py-3 text-base text-papel hover:border-humo transition-colors"
                     >
-                      Cancelar
+                      Volver
                     </button>
                   )}
                 </div>
               </form>
+              {ayuda}
             </div>
           ) : (
             /* ── Estado: con sesión y empresa ───────────────────────── */
             <div className="space-y-6">
-              {/* Selector de empresa activa */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* Negocio activo */}
+              <div className="space-y-3">
                 {empresas.length > 1 ? (
                   <label className="block">
-                    <span className="mb-1 block font-mono text-[11px] uppercase tracking-[0.18em] text-humo">
-                      Viendo empresa
-                    </span>
+                    <span className={labelTxt}>Estás viendo</span>
                     <select
                       value={empresaActiva ?? ""}
                       onChange={(e) => onCambiarEmpresa(e.target.value)}
@@ -567,106 +730,98 @@ export default function MiIva() {
                     </select>
                   </label>
                 ) : (
-                  <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-humo">
-                    {empresas[0]?.nombre} · {empresas[0]?.rut}
+                  <p className="text-lg font-semibold text-papel">
+                    {empresas[0]?.nombre} <span className="whitespace-nowrap font-normal text-humo">· {empresas[0]?.rut}</span>
                   </p>
                 )}
                 <button
                   type="button"
                   onClick={() => setMostrarAgregar(true)}
-                  className="font-mono text-[11px] uppercase tracking-[0.18em] text-cancha hover:text-cancha-dim transition-colors"
+                  className="min-h-[44px] text-base font-semibold text-cancha underline underline-offset-4 hover:text-cancha-dim"
                 >
-                  ＋ Agregar empresa
+                  + Agregar otro negocio
                 </button>
               </div>
 
               {/* Cierre del mes */}
-              <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
+              <div className={tarjeta}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="kicker">Mi cierre del mes</p>
+                  <h3 className="font-display text-2xl font-semibold text-papel">
+                    {cierre ? `Tu IVA de ${mesLargo(cierre.periodo)}` : "Tu IVA del mes"}
+                  </h3>
                   {cierre && estadoBadge(cierre.estado)}
                 </div>
 
-                {usuario && (
-                  <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-humo">
-                    Cuenta de {usuario.nombre}
-                  </p>
-                )}
-
                 {cierreCargando ? (
-                  <p className="mt-6 font-mono text-sm text-humo animate-pulse">
-                    Cargando tu cierre…
-                  </p>
+                  <p className="mt-6 text-lg text-humo animate-pulse">Calculando…</p>
                 ) : cierreError ? (
-                  <div className="mt-6">
-                    <p role="alert" className="font-mono text-xs text-multa">
-                      {cierreError}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void cargarCierre()}
-                      className="mt-3 rounded-full border border-linea px-5 py-2 text-sm text-papel hover:border-cancha/60 transition-colors"
-                    >
-                      Reintentar
+                  <div className="mt-4">
+                    {mensajeError(cierreError)}
+                    <button type="button" onClick={() => void cargarCierre()} className={`${btnSecundario} mt-4`}>
+                      Intentar de nuevo
                     </button>
                   </div>
                 ) : cierre ? (
                   sinDatos ? (
-                    /* ── Cierre sin datos: estado vacío amigable ── */
-                    <div className="mt-6 rounded-xl border border-dashed border-linea p-6 text-center">
-                      <p className="font-mono text-xs uppercase tracking-[0.18em] text-humo">
-                        Período {cierre.periodo}
-                      </p>
-                      <p className="mt-3 text-base text-papel">
-                        Aún no tenemos tus libros de este mes — sincroniza o súbelos.
-                      </p>
-                      {calcGuardada ? (
-                        <p className="mt-2 text-sm text-humo">
-                          En la calculadora estimaste ventas de{" "}
-                          <span className="font-mono text-cancha">{clp(calcGuardada.ventas)}</span> al
-                          mes. Sube tus libros reales y te mostramos tu IVA exacto, no una estimación.
+                    /* ── Sin datos: decir qué hacer, con un botón ── */
+                    <div className="mt-5 rounded-xl border-2 border-dashed border-linea p-5 text-center">
+                      <p className="text-lg text-papel">Todavía no tenemos tus facturas de este mes.</p>
+                      {calcGuardada && (
+                        <p className="mt-2 text-base text-humo">
+                          En la calculadora pusiste ventas de{" "}
+                          <span className="font-semibold text-cancha">{clp(calcGuardada.ventas)}</span> al mes.
                         </p>
-                      ) : (
-                        <p className="mt-2 text-sm text-humo">
-                          La sincronización automática llega con la conexión al SII.
-                        </p>
+                      )}
+                      {!siiConectado && (
+                        <a href="#conectar-sii" className={`${btnPrimario} mt-5`}>
+                          Conectar con el SII ↓
+                        </a>
                       )}
                     </div>
                   ) : (
                     <>
-                      <p className="mt-4 font-mono text-xs uppercase tracking-[0.18em] text-humo">
-                        Período {cierre.periodo}
+                      <p className="mt-5 text-base text-humo">Lo que pagas este mes</p>
+                      <p className="mt-1 font-display font-bold text-5xl sm:text-6xl text-cancha leading-none">
+                        {clp(cierre.totalAPagar)}
                       </p>
-                      <p className="mt-2 font-display font-bold text-4xl sm:text-6xl text-cancha leading-none">
-                        {clp(cierre.ivaAPagar)}
-                      </p>
-                      <p className="mt-3 text-sm text-humo">IVA a pagar este mes</p>
+                      <p className="mt-2 text-sm text-humo">IVA + PPM, con tus facturas del SII.</p>
 
-                      <dl className="mt-7 space-y-3 border-t border-linea pt-6 text-sm">
+                      <dl className="mt-7 space-y-4 border-t border-linea pt-6 text-base">
                         <div className="flex justify-between gap-4">
-                          <dt className="text-humo">Débito fiscal (ventas)</dt>
-                          <dd className="font-mono text-papel">{clp(cierre.debitoFiscal)}</dd>
+                          <dt className="text-humo">
+                            IVA de lo que vendiste
+                            <span className="block text-sm">(débito fiscal)</span>
+                          </dt>
+                          <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.debitoFiscal)}</dd>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <dt className="text-humo">Crédito fiscal (compras)</dt>
-                          <dd className="font-mono text-papel">{clp(cierre.creditoFiscal)}</dd>
+                          <dt className="text-humo">
+                            Menos el IVA de lo que compraste
+                            <span className="block text-sm">(crédito fiscal)</span>
+                          </dt>
+                          <dd className="whitespace-nowrap font-mono text-papel">− {clp(cierre.creditoFiscal)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 border-t border-linea pt-4">
+                          <dt className="text-papel">IVA a pagar</dt>
+                          <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ivaAPagar)}</dd>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <dt className="text-humo">PPM (tasa {cierre.tasaPpm}%)</dt>
-                          <dd className="font-mono text-papel">{clp(cierre.ppm)}</dd>
+                          <dt className="text-humo">
+                            Más el PPM ({tasaPpmTexto(cierre.tasaPpm)} de tus ventas)
+                            <span className="block text-sm">(adelanto del impuesto a la renta)</span>
+                          </dt>
+                          <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ppm)}</dd>
                         </div>
-                        <div className="flex justify-between gap-4 border-t border-linea pt-3">
-                          <dt className="font-medium text-papel">Total a pagar</dt>
-                          <dd className="font-mono font-medium text-papel">
-                            {clp(cierre.totalAPagar)}
-                          </dd>
+                        <div className="flex justify-between gap-4 border-t border-linea pt-4">
+                          <dt className="font-semibold text-papel">Total a pagar</dt>
+                          <dd className="whitespace-nowrap font-mono font-semibold text-papel">{clp(cierre.totalAPagar)}</dd>
                         </div>
                       </dl>
 
-                      {cierre.creditoArrastrable != null && (
-                        <p className="mt-4 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 font-mono text-[11px] text-cancha">
-                          Tienes {clp(cierre.creditoArrastrable)} de crédito arrastrable para los
-                          próximos meses.
+                      {(cierre.creditoArrastrable ?? 0) > 0 && (
+                        <p className="mt-5 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 text-base text-cancha">
+                          A tu favor: te sobran {clp(cierre.creditoArrastrable ?? 0)} de IVA de compras. Se
+                          descuentan el próximo mes.
                         </p>
                       )}
                     </>
@@ -674,201 +829,46 @@ export default function MiIva() {
                 ) : null}
               </div>
 
-              {/* Descargar libros */}
-              <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
-                <p className="kicker">Descargar libros</p>
-                <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end">
-                  <label className="block flex-1">
-                    <span className="mb-1.5 block text-sm font-medium">Período</span>
-                    <input
-                      type="month"
-                      value={periodo}
-                      onChange={(e) => setPeriodo(e.target.value)}
-                      className={inputCls}
-                    />
-                  </label>
-                  <div className="flex flex-col gap-3 sm:flex-row">
+              {/* Paso 3 / sincronizar: antes que las descargas, es lo que más importa */}
+              {tarjetaSii}
+
+              {/* Descargar libros (para el contador o para guardar) */}
+              {!sinDatos && (
+                <div className={tarjeta}>
+                  <h3 className="font-display text-xl font-semibold text-papel">Descargar tus libros</h3>
+                  <p className="mt-2 text-base text-humo">
+                    Planilla con tus compras y ventas de {mesLargo(periodo)}, para guardar o mandar a tu contador.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
-                      disabled={descargando !== null || !periodo || sinDatos}
+                      disabled={descargando !== null || !periodo}
                       onClick={() => void onDescargar("compra")}
-                      className="rounded-full border border-cancha/50 px-6 py-3 text-sm font-semibold text-cancha hover:bg-cancha/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className={btnSecundario}
                     >
                       {descargando === "compra" ? "Descargando…" : "Libro de compras"}
                     </button>
                     <button
                       type="button"
-                      disabled={descargando !== null || !periodo || sinDatos}
+                      disabled={descargando !== null || !periodo}
                       onClick={() => void onDescargar("venta")}
-                      className="rounded-full border border-cancha/50 px-6 py-3 text-sm font-semibold text-cancha hover:bg-cancha/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className={btnSecundario}
                     >
                       {descargando === "venta" ? "Descargando…" : "Libro de ventas"}
                     </button>
                   </div>
+                  {mensajeError(descargaError)}
                 </div>
-                {descargaError && (
-                  <p role="alert" className="mt-4 font-mono text-xs text-multa">
-                    {descargaError}
-                  </p>
-                )}
-                <p className="mt-4 font-mono text-[11px] leading-relaxed text-humo/70">
-                  También puedes importar tus libros directo desde el SII configurando la
-                  conexión de abajo.
-                </p>
-              </div>
+              )}
 
-              {/* Conexión SII */}
-              <div className="rounded-2xl border border-linea bg-tinta p-6 sm:p-8">
-                <p className="kicker">Conexión con el SII (opcional)</p>
-
-                {/* Opción A — Mandatario Digital (recomendada): sin entregar la clave */}
-                <div className="mt-5 rounded-xl border border-cancha/40 bg-cancha/5 p-5 sm:p-6">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-sm font-semibold text-papel">
-                      Opción A — Sin entregar tu clave: Mandatario Digital
-                    </p>
-                    <span className="inline-flex items-center rounded-full border border-cancha/40 bg-cancha/15 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-cancha">
-                      Recomendada
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm font-medium text-cancha">
-                    Tu clave tributaria jamás sale de tus manos.
-                  </p>
-                  <ol className="mt-3 space-y-2 text-sm leading-relaxed text-humo">
-                    <li>
-                      <span className="font-mono text-cancha">1.</span> Entra a sii.cl con tu clave
-                      tributaria.
-                    </li>
-                    <li>
-                      <span className="font-mono text-cancha">2.</span> En el menú "Mandatarios",
-                      autoriza como mandatario al RUT que te enviaremos por WhatsApp.
-                    </li>
-                    <li>
-                      <span className="font-mono text-cancha">3.</span> Nosotros operamos con nuestra
-                      propia clave — y tú revocas la autorización cuando quieras, directo en el SII.
-                    </li>
-                  </ol>
-                  <p className="mt-3 font-mono text-[11px] leading-relaxed text-humo/70">
-                    Figura legal del art. 9° del Código Tributario: el mandatario entra al SII con su
-                    propia clave, nunca con la tuya.
-                  </p>
-                  <a
-                    href={WHATSAPP_MANDATARIO_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-4 inline-block rounded-full bg-cancha px-6 py-3 text-sm font-semibold text-tinta hover:bg-cancha/90 transition-colors"
-                  >
-                    Conectar con Mandatario Digital por WhatsApp →
-                  </a>
-                </div>
-
-                {/* Opción B — Automatización total: clave cifrada */}
-                <div className="mt-8">
-                  <p className="text-sm font-semibold text-papel">
-                    Opción B — Automatización total: clave cifrada
-                  </p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-humo">
-                    Si prefieres que el sistema baje tus libros solo cada mes, sin que nadie
-                    intervenga, guarda tu clave cifrada:
-                  </p>
-                </div>
-
-                {/* Mensaje de seguridad: siempre visible, antes de pedir la clave */}
-                <div className="mt-4 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3">
-                  <p className="text-sm font-semibold text-papel">
-                    🔒 Tu clave tributaria queda cifrada y nadie puede leerla
-                  </p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-humo">
-                    Se guarda cifrada con el mismo estándar que usan los bancos (AES-256).
-                    Ni el equipo de KickoffIVA ni nadie puede verla, y jamás se muestra en
-                    pantalla. Solo se usa para descargar tus libros de compra y venta desde
-                    el SII, y puedes reemplazarla cuando quieras guardando una nueva.
-                  </p>
-                </div>
-
-                {empresa?.siiConfigurado ? (
-                  <div className="mt-5">
-                    <p className="text-sm text-cancha">
-                      ✓ Clave tributaria configurada (cifrada). El SII nunca la muestra de vuelta.
-                    </p>
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                      <button
-                        type="button"
-                        disabled={syncCargando || !periodo}
-                        onClick={() => void onSincronizar()}
-                        className="rounded-full bg-cancha px-6 py-3 text-sm font-semibold text-tinta hover:bg-cancha/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {syncCargando ? "Sincronizando con el SII…" : `Sincronizar ${periodo} desde el SII`}
-                      </button>
-                    </div>
-                    <p className="mt-3 font-mono text-[11px] text-humo/70">
-                      ¿Cambiaste tu clave en el SII? Guárdala de nuevo abajo y se reemplaza cifrada.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-humo">
-                    Con esta conexión tus libros se importan solos cada mes, sin que subas nada a mano.
-                  </p>
-                )}
-
-                <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarSii(e)} className="mt-5 space-y-4">
-                  <div className="flex flex-col gap-4 sm:flex-row">
-                    <label className="block flex-1">
-                      <span className="mb-1.5 block text-sm font-medium">RUT con que entras al SII</span>
-                      <input
-                        type="text"
-                        required
-                        value={rutSii}
-                        onChange={(e) => setRutSii(e.target.value)}
-                        placeholder="12.345.678-5"
-                        className={inputCls}
-                      />
-                      <p className="mt-1.5 font-mono text-[11px] text-humo/70">
-                        El mismo RUT que usas para entrar a sii.cl — puede ser tu RUT personal o el de la empresa, según cómo ingreses al portal.
-                      </p>
-                    </label>
-                    <label className="block flex-1">
-                      <span className="mb-1.5 block text-sm font-medium">Clave tributaria</span>
-                      <input
-                        type="password"
-                        required
-                        autoComplete="off"
-                        value={claveSii}
-                        onChange={(e) => setClaveSii(e.target.value)}
-                        placeholder="••••••••"
-                        className={inputCls}
-                      />
-                      <p className="mt-1.5 font-mono text-[11px] text-humo/70">
-                        La misma clave con que entras a sii.cl. Viaja cifrada y se guarda cifrada.
-                      </p>
-                    </label>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={siiCargando}
-                    className="rounded-full border border-cancha/50 px-6 py-3 text-sm font-semibold text-cancha hover:bg-cancha/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {siiCargando ? "Guardando cifrada…" : empresa?.siiConfigurado ? "Reemplazar clave (se cifra)" : "Guardar clave cifrada"}
-                  </button>
-                </form>
-
-                {siiError && (
-                  <p role="alert" className="mt-4 font-mono text-xs text-multa">{siiError}</p>
-                )}
-                {siiOk && (
-                  <p role="status" className="mt-4 font-mono text-xs text-cancha">{siiOk}</p>
-                )}
-                {syncMsg && (
-                  <p role="status" className="mt-2 font-mono text-xs text-cancha">{syncMsg}</p>
-                )}
-              </div>
+              {ayuda}
 
               <button
                 type="button"
                 onClick={onLogout}
-                className="font-mono text-[11px] uppercase tracking-[0.18em] text-humo hover:text-papel transition-colors"
+                className="min-h-[44px] text-base text-humo underline underline-offset-4 hover:text-papel transition-colors"
               >
-                Cerrar sesión →
+                Salir de mi cuenta
               </button>
             </div>
           )}

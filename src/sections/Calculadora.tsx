@@ -31,6 +31,36 @@ const MULTA_BASE = 0.10;
 const MULTA_MES_EXTRA = 0.02;
 const INTERES_MES = 0.015;
 
+/** Botones − / + grandes: deslizar con el dedo un valor exacto es difícil en el celular. */
+function Ajustar({
+  valor,
+  min,
+  max,
+  paso,
+  onChange,
+  etiqueta,
+}: {
+  valor: number;
+  min: number;
+  max: number;
+  paso: number;
+  onChange: (v: number) => void;
+  etiqueta: string;
+}) {
+  const btn =
+    "h-12 w-12 shrink-0 rounded-full border-2 border-linea text-2xl font-semibold text-papel hover:border-cancha disabled:opacity-40";
+  return (
+    <div className="flex items-center gap-3">
+      <button type="button" aria-label={`Bajar ${etiqueta}`} disabled={valor <= min} onClick={() => onChange(Math.max(min, valor - paso))} className={btn}>
+        −
+      </button>
+      <button type="button" aria-label={`Subir ${etiqueta}`} disabled={valor >= max} onClick={() => onChange(Math.min(max, valor + paso))} className={btn}>
+        +
+      </button>
+    </div>
+  );
+}
+
 export default function Calculadora() {
   const [ventas, setVentas] = useState(3000000);
   const [meses, setMeses] = useState(2);
@@ -68,7 +98,7 @@ export default function Calculadora() {
           <div className="space-y-8">
             <label className="block">
               <span className="flex items-baseline justify-between gap-4">
-                <span className="text-sm font-medium">Ventas mensuales aprox.</span>
+                <span className="text-base font-semibold">Ventas mensuales aprox.</span>
                 <span className="font-mono text-lg text-cancha">{clp(ventas)}</span>
               </span>
               <input
@@ -81,11 +111,12 @@ export default function Calculadora() {
                 className="mt-3 w-full accent-cancha"
                 aria-label="Ventas mensuales aproximadas"
               />
+              <Ajustar valor={ventas} min={500000} max={40000000} paso={500000} onChange={setVentas} etiqueta="ventas mensuales aprox." />
             </label>
 
             <label className="block">
               <span className="flex items-baseline justify-between gap-4">
-                <span className="text-sm font-medium">Meses con F29 atrasado este año</span>
+                <span className="text-base font-semibold">Meses con F29 atrasado este año</span>
                 <span className="font-mono text-lg text-cancha">{meses}</span>
               </span>
               <input
@@ -98,11 +129,12 @@ export default function Calculadora() {
                 className="mt-3 w-full accent-cancha"
                 aria-label="Meses con F29 atrasado"
               />
+              <Ajustar valor={meses} min={0} max={12} paso={1} onChange={setMeses} etiqueta="meses con f29 atrasado este año" />
             </label>
 
             <label className="block">
               <span className="flex items-baseline justify-between gap-4">
-                <span className="text-sm font-medium">Multas que ya pagaste</span>
+                <span className="text-base font-semibold">Multas que ya pagaste</span>
                 <span className="font-mono text-lg text-cancha">{clp(pagadas)}</span>
               </span>
               <input
@@ -115,10 +147,11 @@ export default function Calculadora() {
                 className="mt-3 w-full accent-cancha"
                 aria-label="Multas ya pagadas"
               />
+              <Ajustar valor={pagadas} min={0} max={5000000} paso={50000} onChange={setPagadas} etiqueta="multas que ya pagaste" />
             </label>
 
-            <p className="font-mono text-[11px] text-humo leading-relaxed">
-              ← Mueve los 3 datos y mira tu número. Sin registro, sin correo.
+            <p className="text-base text-humo leading-relaxed">
+              Mueve la barra o usa los botones − y +. Tu número aparece al tiro, sin registrarte.
             </p>
           </div>
 
@@ -159,7 +192,7 @@ export default function Calculadora() {
             >
               Quiero mi número real, no estimado →
             </a>
-            <p className="mt-3 text-center font-mono text-[11px] text-humo">
+            <p className="mt-3 text-center text-sm text-humo">
               Estimación referencial, no constituye asesoría tributaria. En Mi IVA tus datos se retoman automáticamente.
             </p>
           </div>
