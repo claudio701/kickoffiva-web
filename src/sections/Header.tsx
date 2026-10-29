@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { WHATSAPP_URL } from "../config";
+import { abrirAsistente } from "../lib/asistente";
+import { irAEntrar, useSesion } from "../lib/sesion";
 
 const NAV = [
   { href: "#como-funciona", label: "Cómo funciona" },
   { href: "#plan", label: "Plan" },
   { href: "#servicios", label: "Servicios" },
   { href: "#faq", label: "Preguntas" },
-  { href: "#mi-iva", label: "Mi IVA" },
 ];
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const sesion = useSesion();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -27,9 +28,9 @@ export default function Header() {
         scrolled || open ? "border-linea bg-tinta/90 backdrop-blur-md" : "border-transparent"
       }`}
     >
-      <div className="wrap flex h-14 sm:h-16 items-center justify-between gap-4">
+      <div className="wrap flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4">
         <a href="#top" className="flex items-baseline gap-2 shrink-0" onClick={() => setOpen(false)}>
-          <span className="font-display font-bold text-lg sm:text-xl tracking-tight">
+          <span className="font-display font-bold text-base min-[380px]:text-lg sm:text-xl tracking-tight">
             KICKOFF<span className="text-cancha">IVA</span>
           </span>
           <span className="hidden md:inline font-mono text-[10px] uppercase tracking-[0.18em] text-humo">
@@ -49,29 +50,33 @@ export default function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Clientes que vuelven: "Entrar" siempre visible, sin buscar en el menú */}
+          <button
+            type="button"
+            onClick={abrirAsistente}
+            className="min-h-[44px] rounded-full border border-humo/60 px-2.5 sm:px-4 py-2 text-sm font-semibold text-papel hover:border-papel transition-colors"
+          >
+            <span aria-hidden="true" className="hidden min-[400px]:inline">💬 </span>Ayuda
+          </button>
+          {/* Lo principal: entrar a probar, siempre visible y en el color de acción */}
           <a
             href="#mi-iva"
-            className="rounded-full border border-linea px-4 py-2.5 text-sm font-semibold text-papel hover:border-humo transition-colors"
+            onClick={() => {
+              setOpen(false);
+              // Quien toca "Entrar" arriba casi siempre ya tiene cuenta.
+              irAEntrar("login");
+            }}
+            className="min-h-[44px] inline-flex items-center whitespace-nowrap rounded-full bg-cancha px-3.5 sm:px-5 py-2 text-base font-semibold text-tinta hover:bg-cancha-dim transition-colors"
           >
-            Entrar
-          </a>
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-full bg-cancha px-4 sm:px-5 py-2.5 text-sm font-semibold text-tinta hover:bg-cancha-dim transition-colors"
-          >
-            <span className="hidden sm:inline">Hablemos →</span>
-            <span className="sm:hidden">WhatsApp</span>
+            {sesion ? "Mi cuenta" : "Entrar"}
           </a>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
-            className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-linea text-papel"
+            className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-full border border-linea text-papel"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>

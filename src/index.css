@@ -59,6 +59,11 @@
     @apply bg-tinta text-papel font-sans antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* Foco de teclado siempre visible (también en los botones verdes) */
+  :focus-visible {
+    outline: 3px solid #F2EFE6;
+    outline-offset: 3px;
+  }
   ::selection {
     background: #c8f04a;
     color: #0c0c0a;
@@ -77,7 +82,7 @@
 @layer components {
   /* Etiqueta mono superior de sección, estilo editorial */
   .kicker {
-    @apply font-mono text-[11px] sm:text-xs uppercase tracking-[0.22em] text-humo;
+    @apply font-mono text-[13px] sm:text-sm uppercase tracking-[0.18em] text-humo;
   }
   /* Titular grande Fraunces */
   .headline {

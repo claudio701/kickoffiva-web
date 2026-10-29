@@ -15,6 +15,7 @@ import CtaFinal from "../sections/CtaFinal";
 import Footer from "../sections/Footer";
 import StickyCta from "../sections/StickyCta";
 import Asistente from "../components/Asistente";
+import { BandaEntrar } from "../components/Botones";
 import { useEffect } from "react";
 
 export default function Home() {
@@ -41,15 +42,18 @@ export default function Home() {
         <Hero />
         <Respaldo />
         <Problemas />
+        <BandaEntrar frase="¿Te pasa alguna de estas? Entra y mira tu IVA de este mes." />
         <Calculadora />
         <MiIva />
         <ComoFunciona />
         <Timeline />
+        <BandaEntrar frase="Son 3 pasos y toma 2 minutos." />
         <Garantia />
         <Plan />
         <Servicios />
         <Equipo />
         <Faq />
+        <BandaEntrar frase="¿Listo para probar? No necesitas saber de impuestos." />
         <CtaFinal />
       </main>
       <Footer />

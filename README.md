@@ -42,6 +42,8 @@ node scripts/verify-api.mjs https://api.kickoffiva.cl
 | `SII_ENC_KEY` | 64 hex (32 bytes): llave maestra del cifrado AES-256-GCM de todo lo que viene del SII — secreto |
 | `SII_ENC_KEY_PREVIOUS` | Llaves anteriores (64 hex, separadas por coma), solo durante una rotación — secreto, opcional |
 | `CRON_SECRET` | Protege `/api/cron/*` (header `x-cron-secret`) — secreto, opcional |
+| `RESEND_API_KEY` | Envío de correos de "¿Olvidaste tu contraseña?" ([Resend](https://resend.com)) — secreto. Sin ella, el sitio pide escribir por WhatsApp |
+| `RESEND_FROM` | Remitente, p.ej. `KickoffIVA <hola@kickoffiva.cl>` (dominio verificado en Resend). Con el de prueba `onboarding@resend.dev` solo llega al dueño de la cuenta Resend |
 | `TURNSTILE_SECRET` | Clave secreta de Cloudflare Turnstile (captcha invisible en registro/ingreso) — secreto, opcional |
 | `VITE_TURNSTILE_SITE_KEY` | Clave pública de Turnstile, se usa al compilar el frontend — opcional, va junto con la anterior |
 | `SII_MOCK` | `1` = SII simulado; ausente/`0` = SII real |
