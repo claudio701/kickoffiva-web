@@ -42,9 +42,21 @@ node scripts/verify-api.mjs https://api.kickoffiva.cl
 | `SII_ENC_KEY` | 64 hex (32 bytes): llave maestra del cifrado AES-256-GCM de todo lo que viene del SII — secreto |
 | `SII_ENC_KEY_PREVIOUS` | Llaves anteriores (64 hex, separadas por coma), solo durante una rotación — secreto, opcional |
 | `CRON_SECRET` | Protege `/api/cron/*` (header `x-cron-secret`) — secreto, opcional |
+| `TURNSTILE_SECRET` | Clave secreta de Cloudflare Turnstile (captcha invisible en registro/ingreso) — secreto, opcional |
+| `VITE_TURNSTILE_SITE_KEY` | Clave pública de Turnstile, se usa al compilar el frontend — opcional, va junto con la anterior |
 | `SII_MOCK` | `1` = SII simulado; ausente/`0` = SII real |
 
 Nunca van en el código ni en Git.
+
+## Protección contra bots
+
+Siempre activo (`functions/_lib/limites.ts`): máximo 8 ingresos fallidos por correo y 30 por IP cada
+15 minutos, y 5 cuentas nuevas por IP por hora (HTTP 429 con mensaje claro). Los intentos se guardan
+en `auth_intentos` con la clave hasheada (sin correos ni IPs legibles).
+
+Captcha invisible (Cloudflare Turnstile): Cloudflare → Turnstile → crear widget para `kickoffiva.cl`,
+luego poner `TURNSTILE_SECRET` y `VITE_TURNSTILE_SITE_KEY` en las variables de Pages y desplegar.
+Hay que configurar **las dos** juntas: con solo el secreto, el servidor exigiría un token que el sitio no envía.
 
 ## Cifrado de los datos del SII
 

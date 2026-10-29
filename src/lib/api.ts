@@ -32,6 +32,8 @@ export interface RegisterInput {
   nombre: string;
   /** WhatsApp de contacto para las alertas mensuales (opcional). */
   telefono?: string;
+  /** Token de Cloudflare Turnstile (solo si el captcha está activo). */
+  turnstileToken?: string;
   /** Empresa inicial opcional (también se puede agregar después). */
   nombreEmpresa?: string;
   rutEmpresa?: string;
@@ -65,6 +67,8 @@ export interface Empresa {
   nombre: string;
   rut: string;
   tasaPpm: number;
+  /** false = es el 1% por defecto, el cliente aún no confirmó la tasa que le fijó el SII. */
+  tasaPpmConfirmada: boolean;
   siiConfigurado: boolean;
 }
 
@@ -212,14 +216,14 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
   return data;
 }
 
-export async function login(email: string, password: string): Promise<AuthResponse> {
+export async function login(email: string, password: string, turnstileToken?: string): Promise<AuthResponse> {
   // POST /api/auth/login → {token, user} | 401 credenciales inválidas
   const data = await apiJson<AuthResponse>(
     "/api/auth/login",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(turnstileToken ? { turnstileToken } : {}) }),
     },
     { auth: false }
   );
@@ -279,7 +283,7 @@ export async function getEmpresa(): Promise<Empresa | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
   const data = (await res.json()) as Empresa;
-  return { ...data, tasaPpm: Number(data.tasaPpm) || 0 };
+  return { ...data, tasaPpm: Number(data.tasaPpm) || 0, tasaPpmConfirmada: Boolean(data.tasaPpmConfirmada) };
 }
 
 export async function guardarCredencialesSii(
@@ -292,6 +296,15 @@ export async function guardarCredencialesSii(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rutSii, claveSii }),
+  });
+}
+
+export async function guardarTasaPpm(tasa: number): Promise<{ ok: true; tasaPpm: number }> {
+  // PUT /api/empresa/ppm (Bearer) — tasa como fracción (0.0025 = 0,25%)
+  return apiJson("/api/empresa/ppm", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tasaPpm: tasa }),
   });
 }
 

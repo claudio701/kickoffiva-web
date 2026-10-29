@@ -11,6 +11,7 @@ import {
   getMe,
   getToken,
   guardarCredencialesSii,
+  guardarTasaPpm,
   login,
   logout,
   register,
@@ -24,6 +25,7 @@ import {
 } from "../lib/api";
 import { rutValido } from "../lib/rut";
 import { mesLargo, tasaPpmTexto } from "../lib/formato";
+import Turnstile, { TURNSTILE_ACTIVO } from "../components/Turnstile";
 import { leerCalcGuardada } from "./Calculadora";
 
 const ESTADO_STYLES: Record<EstadoCierre, string> = {
@@ -80,6 +82,15 @@ export default function MiIva() {
   const [erroresRegistro, setErroresRegistro] = useState<ErroresRegistro>({});
   const [authCargando, setAuthCargando] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  // Turnstile: el token sirve una sola vez; tras cada envío se vuelve a montar el widget.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
+
+  // ── Tasa PPM ──
+  const [editandoPpm, setEditandoPpm] = useState(false);
+  const [ppmTexto, setPpmTexto] = useState("");
+  const [ppmCargando, setPpmCargando] = useState(false);
+  const [ppmError, setPpmError] = useState<string | null>(null);
 
   // ── Empresas de la cuenta ──
   const [empresas, setEmpresas] = useState<EmpresaResumen[] | null>(null);
@@ -226,8 +237,14 @@ export default function MiIva() {
       if (Object.keys(errs).length > 0) return;
     }
 
+    if (TURNSTILE_ACTIVO && !captchaToken) {
+      setAuthError("Estamos verificando que eres una persona. Espera un segundo y vuelve a tocar el botón.");
+      return;
+    }
+
     setAuthCargando(true);
     try {
+      const token = captchaToken ?? undefined;
       const res =
         modo === "register"
           ? await register({
@@ -235,14 +252,17 @@ export default function MiIva() {
               password,
               nombre: nombre.trim(),
               ...(telefono.trim() ? { telefono: telefono.trim() } : {}),
+              ...(token ? { turnstileToken: token } : {}),
             })
-          : await login(email.trim(), password);
+          : await login(email.trim(), password, token);
       setUsuario(res.user);
       setPassword("");
       setAutenticado(true);
     } catch (e) {
       setAuthError(
-        e instanceof ApiError && e.status !== 401
+        e instanceof ApiError && e.status === 401 && modo === "login"
+          ? "El correo o la contraseña no coinciden. Revisa e intenta de nuevo."
+          : e instanceof ApiError && e.status !== 401
           ? e.message
           : manejarError(
               e,
@@ -253,6 +273,32 @@ export default function MiIva() {
       );
     } finally {
       setAuthCargando(false);
+      if (TURNSTILE_ACTIVO) {
+        setCaptchaToken(null);
+        setCaptchaKey((k) => k + 1);
+      }
+    }
+  };
+
+  const onGuardarPpm = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setPpmError(null);
+    // La persona escribe el porcentaje como lo ve en su F29: "0,25" o "1".
+    const pct = Number(ppmTexto.replace("%", "").replace(",", ".").trim());
+    if (!ppmTexto.trim() || !Number.isFinite(pct) || pct < 0 || pct > 30) {
+      setPpmError("Escribe solo el número del porcentaje. Ejemplo: 0,25 o 1");
+      return;
+    }
+    setPpmCargando(true);
+    try {
+      await guardarTasaPpm(Math.round(pct * 10000) / 1000000);
+      setEditandoPpm(false);
+      setEmpresa(await getEmpresa());
+      await cargarCierre();
+    } catch (e) {
+      setPpmError(manejarError(e, "No pudimos guardar la tasa. Intenta de nuevo."));
+    } finally {
+      setPpmCargando(false);
     }
   };
 
@@ -376,6 +422,74 @@ export default function MiIva() {
     ) : null;
 
   const siiConectado = Boolean(empresa?.siiConfigurado);
+
+  /* ── Tasa PPM: la fija el SII para cada empresa; no asumir el 1% ─────── */
+  const ppmConfirmada = Boolean(empresa?.tasaPpmConfirmada);
+  const tarjetaPpm = (
+    <div
+      className={`mt-6 rounded-xl border px-4 py-4 ${
+        ppmConfirmada ? "border-linea" : "border-multa/50 bg-multa/10"
+      }`}
+    >
+      {!editandoPpm ? (
+        <>
+          <p className="text-base text-papel">
+            {ppmConfirmada ? (
+              <>Tu tasa de PPM: <strong>{tasaPpmTexto(empresa?.tasaPpm ?? 0)}</strong></>
+            ) : (
+              <>
+                ⚠️ Estamos usando una tasa de PPM de <strong>{tasaPpmTexto(empresa?.tasaPpm ?? 0)}</strong>, pero
+                el SII le fija una distinta a cada empresa (las nuevas suelen tener 0,25%). Confírmala
+                para que el total sea exacto.
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setPpmTexto(String(Math.round((empresa?.tasaPpm ?? 0) * 100 * 1000) / 1000).replace(".", ","));
+              setPpmError(null);
+              setEditandoPpm(true);
+            }}
+            className={`${btnSecundario} mt-3`}
+          >
+            {ppmConfirmada ? "Cambiar mi tasa" : "Confirmar mi tasa"}
+          </button>
+        </>
+      ) : (
+        <form method="post" action="#mi-iva" onSubmit={(e) => void onGuardarPpm(e)}>
+          <label className="block">
+            <span className={labelTxt}>Tu tasa de PPM (en %)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={ppmTexto}
+              onChange={(e) => setPpmTexto(e.target.value)}
+              placeholder="Ejemplo: 0,25"
+              className={inputCls}
+            />
+            <p className={ayudaTxt}>
+              Está en tu último F29, en la casilla 115 ("Tasa PPM 1ª categoría"). Si no la
+              encuentras, escríbenos por WhatsApp y la buscamos contigo.
+            </p>
+          </label>
+          {mensajeError(ppmError)}
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <button type="submit" disabled={ppmCargando} className={btnPrimario}>
+              {ppmCargando ? "Guardando…" : "Guardar tasa"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditandoPpm(false)}
+              className="min-h-[48px] rounded-full border border-linea px-7 py-3 text-base text-papel hover:border-humo"
+            >
+              Volver
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 
   /* ── Tarjeta: conexión con el SII (paso 3) ───────────────────────────── */
   const tarjetaSii = (
@@ -619,6 +733,8 @@ export default function MiIva() {
                   )}
                 </label>
 
+                <Turnstile key={captchaKey} onToken={setCaptchaToken} />
+
                 {mensajeError(authError)}
 
                 <button type="submit" disabled={authCargando} className={btnPrimario}>
@@ -807,7 +923,7 @@ export default function MiIva() {
                         </div>
                         <div className="flex justify-between gap-4">
                           <dt className="text-humo">
-                            Más el PPM ({tasaPpmTexto(cierre.tasaPpm)} de tus ventas)
+                            Más el PPM ({tasaPpmTexto(cierre.tasaPpm)} de tus ventas{ppmConfirmada ? "" : ", sin confirmar"})
                             <span className="block text-sm">(adelanto del impuesto a la renta)</span>
                           </dt>
                           <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ppm)}</dd>
@@ -817,6 +933,8 @@ export default function MiIva() {
                           <dd className="whitespace-nowrap font-mono font-semibold text-papel">{clp(cierre.totalAPagar)}</dd>
                         </div>
                       </dl>
+
+                      {tarjetaPpm}
 
                       {(cierre.creditoArrastrable ?? 0) > 0 && (
                         <p className="mt-5 rounded-xl border border-cancha/30 bg-cancha/5 px-4 py-3 text-base text-cancha">
