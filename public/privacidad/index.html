@@ -37,7 +37,7 @@
         <li><strong>Empresa:</strong> nombre y RUT de la(s) empresa(s) que registras.</li>
         <li><strong>Datos tributarios:</strong> documentos de compra y venta (folios, montos, fechas, RUT de contrapartes) que subes o que se descargan del SII con tu autorización.</li>
         <li><strong>Clave tributaria (opcional):</strong> si activas la sincronización con el SII, tu clave se almacena <strong>cifrada con AES-256-GCM</strong>. Nunca se muestra en pantalla ni en registros del sistema. Solo el servidor la descifra, con una llave guardada aparte de la base de datos, en el momento de descargar tus libros desde el SII. Si el SII la rechaza, dejamos de usarla hasta que guardes una nueva, y puedes borrarla cuando quieras desde tu panel. Como alternativa sin entregar clave, puedes autorizarnos como Mandatario Digital en sii.cl (art. 9° del Código Tributario): operamos con nuestra propia clave y revocas la autorización cuando quieras en el SII.</li>
-        <li><strong>Uso del sitio:</strong> métricas anónimas de navegación (Cloudflare Web Analytics, sin cookies de seguimiento).</li>
+        <li><strong>Uso del sitio:</strong> métricas de navegación con Cloudflare Web Analytics (sin cookies) y Google Analytics, que usa cookies de medición para saber qué páginas y botones se usan. No lo usamos para publicidad.</li>
       </ul>
 
       <h2>3. Para qué los usamos</h2>
@@ -50,7 +50,7 @@
       <p><strong>No vendemos ni compartimos tus datos con terceros</strong> para fines publicitarios. Nunca.</p>
 
       <h2>4. Dónde se guardan</h2>
-      <p>Los datos se almacenan en Neon (PostgreSQL, AWS us-east-2) y el sitio se sirve por Cloudflare Pages. Las contraseñas se guardan con hash PBKDF2 (imposibles de revertir) y las claves tributarias cifradas con AES-256-GCM.</p>
+      <p>Los datos se almacenan en Neon (PostgreSQL, AWS us-east-2) y el sitio se sirve por Cloudflare Pages. Los correos de alertas se envían a través de Resend (Estados Unidos). Las contraseñas se guardan con hash PBKDF2 (imposibles de revertir) y las claves tributarias cifradas con AES-256-GCM.</p>
 
       <h2>5. Tus derechos (Ley 21.719)</h2>
       <p>Puedes ejercer en cualquier momento tus derechos de <strong>acceso, rectificación, cancelación (eliminación), oposición y portabilidad</strong> escribiéndonos por WhatsApp al +56 9 9001 4371. Respondemos en un máximo de 15 días hábiles. Eliminar tu cuenta borra también tus empresas, documentos y credenciales asociadas.</p>

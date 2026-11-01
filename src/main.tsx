@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { iniciarAnalitica } from './lib/analitica'
 
 const rootEl = document.getElementById('root')!
 const app = (
@@ -17,6 +18,8 @@ if (rootEl.hasChildNodes()) {
 } else {
   createRoot(rootEl).render(app)
 }
+
+iniciarAnalitica()
 
 // Service worker solo en producción (permite CSP estricta: script-src 'self')
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

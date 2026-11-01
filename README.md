@@ -46,6 +46,7 @@ node scripts/verify-api.mjs https://api.kickoffiva.cl
 | `RESEND_FROM` | Remitente, p.ej. `KickoffIVA <hola@kickoffiva.cl>` (dominio verificado en Resend). Con el de prueba `onboarding@resend.dev` solo llega al dueño de la cuenta Resend |
 | `TURNSTILE_SECRET` | Clave secreta de Cloudflare Turnstile (captcha invisible en registro/ingreso) — secreto, opcional |
 | `VITE_TURNSTILE_SITE_KEY` | Clave pública de Turnstile, se usa al compilar el frontend — opcional, va junto con la anterior |
+| `VITE_GA_ID` | ID de medición de Google Analytics 4 (`G-XXXXXXX`), se usa al compilar el frontend — opcional. Sin ella no se carga analítica ni se registran eventos (`cuenta_creada`, `sii_sincronizado`, `calculadora_usada`, `clic_whatsapp`) |
 | `SII_MOCK` | `1` = SII simulado; ausente/`0` = SII real |
 
 Nunca van en el código ni en Git.
