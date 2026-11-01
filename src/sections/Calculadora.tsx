@@ -49,7 +49,7 @@ function Ajustar({
   etiqueta: string;
 }) {
   const btn =
-    "h-12 w-12 shrink-0 rounded-full border-2 border-linea text-2xl font-semibold text-papel hover:border-cancha disabled:opacity-40";
+    "h-12 w-12 shrink-0 rounded-full border-2 border-humo/60 text-2xl font-semibold text-papel hover:border-cancha disabled:opacity-40";
   return (
     <div className="flex items-center gap-3">
       <button type="button" aria-label={`Bajar ${etiqueta}`} disabled={valor <= min} onClick={() => onChange(Math.max(min, valor - paso))} className={btn}>

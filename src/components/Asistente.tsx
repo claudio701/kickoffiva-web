@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { waUrl } from "../config";
 import { EVENTO_ABRIR_ASISTENTE } from "../lib/asistente";
+import { irAEntrar } from "../lib/sesion";
 
 /**
  * "Kiko", el amigo que atiende: un personaje que saluda y resuelve las dudas típicas
@@ -14,20 +15,21 @@ const NOMBRE = "Kiko";
 interface Tema {
   pregunta: string;
   respuesta: string;
-  accion?: { texto: string; href: string; externo?: boolean };
+  /** modo: además de ir a #mi-iva, abre la pestaña correcta (antes siempre caía en "Soy nuevo"). */
+  accion?: { texto: string; href: string; externo?: boolean; modo?: "login" | "register" | "recuperar" };
 }
 
 const TEMAS: Tema[] = [
   {
     pregunta: "Quiero entrar y probar",
     respuesta: "¡Buenísimo! Toca el botón y te llevo. Si es tu primera vez, elige \"Soy nuevo\": con el RUT de la empresa, tu correo y una contraseña quedas adentro.",
-    accion: { texto: "Entrar", href: "#mi-iva" },
+    accion: { texto: "Entrar", href: "#mi-iva", modo: "register" },
   },
   {
     pregunta: "Recién llego, ¿qué hago?",
     respuesta:
       "¡Bienvenido! Son 2 pasos: 1) crea tu cuenta con el RUT y el nombre de la empresa, tu correo y una contraseña; 2) conecta el SII. Nosotros calculamos el resto.",
-    accion: { texto: "Llévame a crear mi cuenta", href: "#mi-iva" },
+    accion: { texto: "Llévame a crear mi cuenta", href: "#mi-iva", modo: "register" },
   },
   {
     pregunta: "¿Cuándo y cómo pago el IVA?",
@@ -38,8 +40,8 @@ const TEMAS: Tema[] = [
   {
     pregunta: "Olvidé mi contraseña de KickoffIVA",
     respuesta:
-      "Toca \"Entrar\", luego \"Ya tengo cuenta\" y abajo \"¿Olvidaste tu contraseña?\". Te mandamos un correo con un link para crear una nueva.",
-    accion: { texto: "Ir a entrar", href: "#mi-iva" },
+      "Toca el botón y escribe tu RUT o tu correo. Te mandamos un link para crear una contraseña nueva.",
+    accion: { texto: "Recuperar mi contraseña", href: "#mi-iva", modo: "recuperar" },
   },
   {
     pregunta: "No sé mi clave del SII",
@@ -199,7 +201,10 @@ export default function Asistente() {
                 <a
                   href={tema.accion.href}
                   {...(tema.accion.externo ? { target: "_blank", rel: "noreferrer" } : {})}
-                  onClick={() => !tema.accion?.externo && cerrar()}
+                  onClick={() => {
+                    if (tema.accion?.modo) irAEntrar(tema.accion.modo);
+                    if (!tema.accion?.externo) cerrar();
+                  }}
                   className="mt-4 flex min-h-[48px] items-center justify-center rounded-full bg-cancha px-5 py-3 text-base font-semibold text-tinta"
                 >
                   {tema.accion.texto}
@@ -257,7 +262,9 @@ export default function Asistente() {
         onClick={() => (abierto ? cerrar() : setAbierto(true))}
         aria-label={abierto ? `Cerrar a ${NOMBRE}` : `Abrir a ${NOMBRE}, tu asistente`}
         aria-expanded={abierto}
-        className="h-16 w-16 rounded-full border-2 border-tinta bg-panel shadow-xl transition-transform hover:scale-105"
+        // En celular tapaba botones de la página (p. ej. "Entrar y probar"): ahí Kiko se abre desde
+        // "Ayuda" del encabezado y desde la barra inferior.
+        className="hidden sm:block h-16 w-16 rounded-full border-2 border-tinta bg-panel shadow-xl transition-transform hover:scale-105"
       >
         {/* key: al aparecer el globo, Kiko vuelve a saludar (reinicia la animación). */}
         <Personaje key={olas} className="h-full w-full" />

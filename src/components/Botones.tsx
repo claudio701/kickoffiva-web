@@ -43,7 +43,7 @@ export function BotonConversar({
       type="button"
       onClick={abrirAsistente}
       className={`inline-flex min-h-[52px] items-center justify-center gap-2 rounded-full border-2 px-7 py-3.5 text-base font-semibold transition-colors ${
-        oscuro ? "border-tinta/40 text-tinta hover:border-tinta" : "border-linea text-papel hover:border-cancha/60"
+        oscuro ? "border-tinta/40 text-tinta hover:border-tinta" : "border-humo/60 text-papel hover:border-cancha/60"
       } ${className}`}
     >
       💬 {texto}

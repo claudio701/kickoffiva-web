@@ -55,9 +55,21 @@ function estadoBadge(estado: EstadoCierre) {
   );
 }
 
+/** true si ya pasó el día 20 del mes siguiente (vencimiento del F29 con factura electrónica). */
+function f29Vencido(periodo: string): boolean {
+  const venc = moverMes(periodo, 1);
+  const actual = periodoActual();
+  return actual > venc || (actual === venc && new Date().getDate() > 20);
+}
+
 function periodoActual(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Hasta el día 20 lo urgente es el F29 del mes anterior (vence ese día); después, el mes en curso. */
+function periodoPorDefecto(): string {
+  return new Date().getDate() <= 20 ? moverMes(periodoActual(), -1) : periodoActual();
 }
 
 type Modo = "login" | "register";
@@ -120,7 +132,7 @@ export default function MiIva() {
   const [cierreError, setCierreError] = useState<string | null>(null);
 
   // ── Descargas ──
-  const [periodo, setPeriodo] = useState(periodoActual);
+  const [periodo, setPeriodo] = useState(periodoPorDefecto);
   const [descargando, setDescargando] = useState<"compra" | "venta" | null>(null);
   const [descargaError, setDescargaError] = useState<string | null>(null);
 
@@ -141,10 +153,16 @@ export default function MiIva() {
 
   const manejarError = useCallback((e: unknown, fallback: string): string => {
     if (e instanceof ApiError && e.status === 401) {
+      // Antes la cuenta desaparecía sin aviso y en celular la pantalla quedaba en otra sección.
       setAutenticado(false);
       setUsuario(null);
       setCierre(null);
-      return e.message; // "Sesión expirada..."
+      setEmpresas(null);
+      setModo("login");
+      setVista("normal");
+      setAuthError("Tu sesión se cerró por seguridad. Vuelve a entrar con tu RUT o correo y tu contraseña.");
+      requestAnimationFrame(() => document.getElementById("mi-iva")?.scrollIntoView({ block: "start" }));
+      return "";
     }
     return e instanceof Error ? e.message : fallback;
   }, []);
@@ -171,6 +189,11 @@ export default function MiIva() {
         setVista("normal");
         setAuthError(null);
         setErroresRegistro({});
+      } else if (m === "recuperar") {
+        setModo("login");
+        setVista("recuperar");
+        setAuthError(null);
+        setRecuperarMsg(null);
       }
     };
     window.addEventListener(EVENTO_MODO, cambiar);
@@ -244,7 +267,7 @@ export default function MiIva() {
       return;
     }
     if (!rutValido(nuevaRut)) {
-      setEmpresaError("El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-7).");
+      setEmpresaError("El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-0).");
       return;
     }
     setEmpresaCargando(true);
@@ -266,7 +289,7 @@ export default function MiIva() {
   const validarRegistro = (): ErroresRegistro => {
     const errs: ErroresRegistro = {};
     if (!rutRegistro.trim()) errs.rut = "Escribe el RUT de la empresa.";
-    else if (!rutValido(rutRegistro)) errs.rut = "El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-7).";
+    else if (!rutValido(rutRegistro)) errs.rut = "El RUT no es válido. Revisa el número que va después del guion (ejemplo: 76.123.456-0).";
     if (!nombre.trim()) errs.nombre = "Escribe el nombre de la empresa.";
     if (!email.trim()) {
       errs.email = "Escribe tu correo.";
@@ -409,7 +432,9 @@ export default function MiIva() {
       setSiiError(
         rechazada
           ? "El SII no aceptó tu RUT o tu clave. Revisa que sean los mismos con que entras a sii.cl y guárdalos de nuevo aquí abajo. No volveremos a intentarlo hasta que lo hagas, para que el SII no bloquee tu clave."
-          : msg
+          : /no configuradas/i.test(msg)
+            ? "Primero guarda tu RUT y tu clave del SII aquí abajo."
+            : msg
       );
       if (rechazada) setEmpresa(await getEmpresa().catch(() => empresa));
     } finally {
@@ -508,7 +533,7 @@ export default function MiIva() {
   // Estilos pensados para cualquier persona: letra grande, contraste alto,
   // botones de al menos 48px de alto y ayudas en texto normal (no mono chico).
   const inputCls =
-    "w-full rounded-xl border-2 border-linea bg-tinta px-4 py-3.5 text-lg text-papel placeholder:text-humo outline-none focus:border-cancha focus:ring-2 focus:ring-cancha/30 transition";
+    "w-full rounded-xl border-2 border-humo/60 bg-tinta px-4 py-3.5 text-lg text-papel placeholder:text-humo outline-none focus:border-cancha focus:ring-2 focus:ring-cancha/30 transition";
   const inputErrorCls = "border-multa focus:border-multa focus:ring-multa/30";
   const labelTxt = "mb-2 block text-base font-semibold text-papel";
   const ayudaTxt = "mt-2 text-sm leading-relaxed text-humo";
@@ -609,7 +634,10 @@ export default function MiIva() {
           <input
             type="text"
             required
+            name="rut-sii"
             autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
             value={rutSii}
             onChange={(e) => setRutSii(e.target.value)}
             aria-describedby="ayuda-rut-sii"
@@ -623,7 +651,12 @@ export default function MiIva() {
             <input
               type={verClaveSii ? "text" : "password"}
               required
-              autoComplete="off"
+              name="clave-sii"
+              // "new-password" evita que el navegador ofrezca la contraseña guardada de KickoffIVA:
+              // mandarla al SII como clave puede terminar bloqueando la clave del SII.
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               value={claveSii}
               onChange={(e) => setClaveSii(e.target.value)}
               className={inputCls}
@@ -673,7 +706,10 @@ export default function MiIva() {
           <input
             type="text"
             required
+            name="rut-sii"
             autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
             value={rutSii}
             onChange={(e) => setRutSii(e.target.value)}
             aria-describedby="ayuda-rut-sii"
@@ -687,7 +723,12 @@ export default function MiIva() {
             <input
               type={verClaveSii ? "text" : "password"}
               required
-              autoComplete="off"
+              name="clave-sii"
+              // "new-password" evita que el navegador ofrezca la contraseña guardada de KickoffIVA:
+              // mandarla al SII como clave puede terminar bloqueando la clave del SII.
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               value={claveSii}
               onChange={(e) => setClaveSii(e.target.value)}
               className={inputCls}
@@ -766,7 +807,7 @@ export default function MiIva() {
                       autoComplete="username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Ejemplo: 76.123.456-7"
+                      placeholder="Ejemplo: 76.123.456-0"
                       className={inputCls}
                     />
                   </label>
@@ -897,7 +938,7 @@ export default function MiIva() {
                         autoComplete="off"
                         value={rutRegistro}
                         onChange={(e) => setRutRegistro(e.target.value)}
-                        placeholder="Ejemplo: 76.123.456-7"
+                        placeholder="Ejemplo: 76.123.456-0"
                         aria-invalid={Boolean(erroresRegistro.rut)}
                         className={`${inputCls} ${erroresRegistro.rut ? inputErrorCls : ""}`}
                       />
@@ -946,7 +987,7 @@ export default function MiIva() {
                       autoComplete="username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Ejemplo: 76.123.456-7"
+                      placeholder="Ejemplo: 76.123.456-0"
                       className={inputCls}
                     />
                   </label>
@@ -1004,6 +1045,20 @@ export default function MiIva() {
                 <Turnstile key={captchaKey} onToken={setCaptchaToken} />
 
                 {mensajeError(authError)}
+
+                {modo === "register" && (
+                  <p className={ayudaTxt}>
+                    Al crear tu cuenta aceptas los{" "}
+                    <a href="/terminos/" target="_blank" rel="noreferrer" className="text-papel underline underline-offset-4">
+                      Términos
+                    </a>{" "}
+                    y la{" "}
+                    <a href="/privacidad/" target="_blank" rel="noreferrer" className="text-papel underline underline-offset-4">
+                      Política de privacidad
+                    </a>
+                    .
+                  </p>
+                )}
 
                 <button type="submit" disabled={authCargando} className={btnPrimario}>
                   {authCargando
@@ -1092,7 +1147,7 @@ export default function MiIva() {
                     autoComplete="off"
                     value={nuevaRut}
                     onChange={(e) => setNuevaRut(e.target.value)}
-                    placeholder="Ejemplo: 76.123.456-7"
+                    placeholder="Ejemplo: 76.123.456-0"
                     className={inputCls}
                   />
                   <p className={ayudaTxt}>
@@ -1189,6 +1244,20 @@ export default function MiIva() {
                   </button>
                 </div>
 
+                {periodo !== periodoPorDefecto() && !f29Vencido(periodo) && (
+                  <p className="mt-4 rounded-xl border border-multa/40 bg-multa/10 px-4 py-3 text-base text-papel">
+                    Ojo: lo que vence el {vencimientoF29(periodoPorDefecto())} es el IVA de{" "}
+                    <strong>{mesLargo(periodoPorDefecto())}</strong>.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setPeriodo(periodoPorDefecto())}
+                      className="min-h-[44px] font-semibold text-cancha underline underline-offset-4"
+                    >
+                      Ver {mesLargo(periodoPorDefecto())}
+                    </button>
+                  </p>
+                )}
+
                 {cierreCargando ? (
                   <p className="mt-6 text-lg text-humo animate-pulse">Calculando…</p>
                 ) : cierreError ? (
@@ -1222,11 +1291,28 @@ export default function MiIva() {
                         {clp(cierre.totalAPagar)}
                       </p>
                       <p className="mt-2 text-sm text-humo">IVA + PPM, con tus facturas del SII.</p>
-                      <p className="mt-4 rounded-xl border border-linea bg-panel px-4 py-3 text-base text-papel">
-                        📅 Se declara y paga en el SII (Formulario 29) a más tardar el{" "}
-                        <strong>{vencimientoF29(cierre.periodo)}</strong> si emites factura electrónica
-                        (si no, el {vencimientoF29(cierre.periodo, 12)}). <strong>Este monto todavía no está pagado.</strong>
-                      </p>
+                      {f29Vencido(cierre.periodo) ? (
+                        <div className="mt-4 rounded-xl border border-linea bg-panel px-4 py-3 text-base text-papel">
+                          <p>
+                            📅 Este F29 vencía el <strong>{vencimientoF29(cierre.periodo)}</strong>. Si no lo declaraste,
+                            todavía puedes hacerlo en sii.cl (con multa e intereses) o pedirnos que lo regularicemos.
+                          </p>
+                          <a
+                            href={waUrl(`Hola, necesito regularizar el F29 de ${mesLargo(cierre.periodo)}.`)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-cancha underline underline-offset-4"
+                          >
+                            Pedir que lo regularicen →
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="mt-4 rounded-xl border border-linea bg-panel px-4 py-3 text-base text-papel">
+                          📅 Se declara y paga en el SII (Formulario 29) a más tardar el{" "}
+                          <strong>{vencimientoF29(cierre.periodo)}</strong> si emites factura electrónica
+                          (si no, el {vencimientoF29(cierre.periodo, 12)}). <strong>Este monto todavía no está pagado.</strong>
+                        </p>
+                      )}
                       <button
                         type="button"
                         onClick={abrirAsistente}

@@ -34,7 +34,7 @@ export default function Equipo() {
           href={KICKOFF_URL}
           target="_blank"
           rel="noreferrer"
-          className="mt-8 inline-flex text-sm font-medium text-papel underline decoration-cancha decoration-2 underline-offset-4 hover:text-cancha transition-colors"
+          className="mt-8 inline-flex min-h-[44px] items-center text-sm font-medium text-papel underline decoration-cancha decoration-2 underline-offset-4 hover:text-cancha transition-colors"
         >
           Conocer la consultora Kickoff →
         </a>

@@ -39,7 +39,7 @@ export default function Servicios() {
                   href={waServicioUrl(s.nombre)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm font-medium text-humo group-hover:text-cancha transition-colors"
+                  className="inline-flex min-h-[44px] items-center rounded-full border border-cancha/60 px-4 text-base font-semibold text-cancha hover:bg-cancha hover:text-tinta transition-colors"
                 >
                   Cotizar →
                 </a>

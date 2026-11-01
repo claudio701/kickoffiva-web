@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { irAEntrar, useSesion } from "../lib/sesion";
+import { abrirAsistente } from "../lib/asistente";
 
 // Barra fija inferior solo en móvil: aparece tras hacer scroll,
 // para que el CTA humano siempre esté a un toque de distancia.
@@ -33,13 +34,23 @@ export default function StickyCta() {
       }`}
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <a
-        href="#mi-iva"
-        onClick={() => !sesion && irAEntrar("register")}
-        className="flex min-h-[52px] items-center justify-center rounded-full bg-cancha py-3.5 text-lg font-semibold text-tinta"
-      >
-        {sesion ? "Ver mi IVA →" : "Entrar y probar →"}
-      </a>
+      <div className="flex gap-2">
+        <a
+          href="#mi-iva"
+          onClick={() => !sesion && irAEntrar("register")}
+          className="flex flex-1 min-h-[52px] items-center justify-center rounded-full bg-cancha py-3.5 text-lg font-semibold text-tinta"
+        >
+          {sesion ? "Ver mi IVA →" : "Entrar y probar →"}
+        </a>
+        <button
+          type="button"
+          onClick={abrirAsistente}
+          aria-label="Abrir a Kiko, tu asistente"
+          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border-2 border-humo/60 text-2xl"
+        >
+          💬
+        </button>
+      </div>
     </div>
   );
 }
