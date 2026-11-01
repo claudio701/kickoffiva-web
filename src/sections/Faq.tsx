@@ -19,8 +19,8 @@ const FAQS = [
     a: "El Plan a Todo Evento sí: incluye contabilidad completa, F29, remuneraciones y defensa tributaria. Si ya tienes contador y solo necesitas resolver un problema puntual — una multa, una anotación, F29 atrasados — contratas solo ese servicio y listo.",
   },
   {
-    q: "¿Qué pasa si no levantan mi anotación en 10 días hábiles?",
-    a: "Te devolvemos el 50% del fee. Está firmado en el contrato: no es una promesa comercial, es una obligación nuestra. En el 99% de los casos lo logramos dentro del plazo.",
+    q: "¿Qué pasa si no entregan el levantamiento en 10 días hábiles?",
+    a: "Te devolvemos el 50% del fee del levantamiento. El plazo corre desde que recibimos todos tus antecedentes y está firmado en el contrato. La decisión final de levantar la anotación es del SII. En el 99% de los casos lo logramos dentro del plazo.",
   },
   {
     q: "¿Los precios tienen IVA incluido?",

@@ -61,6 +61,8 @@ export interface CierreActual {
   ventasNetas: number;
   comprasNetas: number;
   creditoArrastrable?: number;
+  /** Remanente de crédito fiscal que viene de los períodos anteriores cargados. */
+  remanenteAnterior?: number;
 }
 
 export interface Empresa {

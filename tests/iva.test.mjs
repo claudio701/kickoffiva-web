@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 // functions/_lib/iva.ts is a typed facade that re-exports the plain-JS mirror
 // functions/_lib/iva.logic.mjs — the single source of truth. Tests import the
 // .mjs directly so `node --test` works with no TS toolchain.
-import { calcCierre } from '../functions/_lib/iva.logic.mjs';
+import { calcCierre, remanenteAcumulado } from '../functions/_lib/iva.logic.mjs';
 
 const doc = (neto, iva, extra = {}) => ({ neto, iva, ...extra });
 
@@ -42,6 +42,7 @@ test('empty arrays', () => {
     comprasNetas: 0,
     debitoFiscal: 0,
     creditoFiscal: 0,
+    remanenteAnterior: 0,
     ivaAPagar: 0,
     creditoArrastrable: 0,
     ppm: 0,
@@ -75,4 +76,34 @@ test('débito equals crédito: nothing payable, nothing arrastrable', () => {
   assert.equal(r.ivaAPagar, 0);
   assert.equal(r.creditoArrastrable, 0);
   assert.equal(r.totalAPagar, 1000); // ppm only
+});
+
+test('remanente del período anterior se suma al crédito (DL 825 art. 26)', () => {
+  // Septiembre: débito 19.000, crédito 38.000 → sobran 19.000 para octubre.
+  const sep = calcCierre([doc(100000, 19000)], [doc(200000, 38000)], 0);
+  assert.equal(sep.creditoArrastrable, 19000);
+  // Octubre: débito 57.000, crédito 19.000 + remanente 19.000 → paga 19.000 (no 38.000).
+  const oct = calcCierre([doc(300000, 57000)], [doc(100000, 19000)], 0, sep.creditoArrastrable);
+  assert.equal(oct.remanenteAnterior, 19000);
+  assert.equal(oct.ivaAPagar, 19000);
+  assert.equal(oct.creditoArrastrable, 0);
+  // Si el remanente supera el débito, el sobrante sigue arrastrándose.
+  const nov = calcCierre([doc(50000, 9500)], [], 0, 30000);
+  assert.equal(nov.ivaAPagar, 0);
+  assert.equal(nov.creditoArrastrable, 20500);
+});
+
+test('remanenteAcumulado: arrastra mes a mes, pasa por meses sin movimiento y no baja de 0', () => {
+  assert.equal(remanenteAcumulado([]), 0);
+  assert.equal(remanenteAcumulado([{ debito: 19000, credito: 38000 }]), 19000);
+  assert.equal(
+    remanenteAcumulado([
+      { debito: 19000, credito: 38000 }, // sobran 19.000
+      { debito: 0, credito: 0 }, // mes sin movimiento: sigue igual
+      { debito: 10000, credito: 0 }, // usa 10.000 → quedan 9.000
+    ]),
+    9000,
+  );
+  // Un mes con más débito consume el remanente y no deja saldo negativo.
+  assert.equal(remanenteAcumulado([{ debito: 0, credito: 5000 }, { debito: 50000, credito: 0 }, { debito: 0, credito: 1000 }]), 1000);
 });

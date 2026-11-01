@@ -7,7 +7,7 @@
  */
 
 // La lógica vive en el .mjs hermano (ver nota del encabezado).
-export { parseRcvCsv, FormatoDesconocido } from './parse.logic.mjs';
+export { parseRcvCsv, parseTipoDoc, FormatoDesconocido } from './parse.logic.mjs';
 
 /** Documento RCV normalizado (contrato del módulo). */
 export interface DocumentoRcv {
@@ -17,6 +17,8 @@ export interface DocumentoRcv {
   rutEmisor: string | null;
   /** Folio del documento, siempre como string. */
   folio: string;
+  /** Tipo de DTE (33 factura, 61 nota de crédito…); null si no vino o no se reconoce. */
+  tipoDoc: number | null;
   /** Monto neto afecto (pesos chilenos, entero). Negativo en notas de crédito. */
   neto: number;
   /** Monto IVA. Negativo en notas de crédito. */

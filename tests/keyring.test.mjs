@@ -104,7 +104,7 @@ test('documentos v2: ida y vuelta amarrada a la empresa; v1 heredado se lee con 
   const l = await crearLlavero(K2, K1);
   const v2 = await cifrarDocV2(l, 'emp1', doc);
   assert.ok(cifradoConActual(l, v2) && !v2.includes('Proveedor'));
-  const esperado = { fecha: '2026-09-15', rutEmisor: '76.123.456-0', folio: '1234', razonSocial: 'Proveedor SpA', neto: 100000, iva: 19000, total: 119000 };
+  const esperado = { fecha: '2026-09-15', rutEmisor: '76.123.456-0', folio: '1234', tipoDoc: null, razonSocial: 'Proveedor SpA', neto: 100000, iva: 19000, total: 119000 };
   assert.deepEqual(await descifrarDocAlguno(l, 'emp1', v2), esperado);
   await assert.rejects(() => descifrarDocAlguno(l, 'emp2', v2));
   const v1 = await cifrarDoc(K1, doc);

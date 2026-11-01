@@ -31,6 +31,7 @@ import Turnstile, { TURNSTILE_ACTIVO } from "../components/Turnstile";
 import { abrirAsistente } from "../lib/asistente";
 import { EVENTO_MODO } from "../lib/sesion";
 import { leerCalcGuardada } from "./Calculadora";
+import { registrarEvento } from "../lib/analitica";
 
 const ESTADO_STYLES: Record<EstadoCierre, string> = {
   listo: "bg-cancha/15 text-cancha border-cancha/40",
@@ -66,6 +67,7 @@ interface ErroresRegistro {
   rut?: string;
   nombre?: string;
   email?: string;
+  terminos?: string;
   password?: string;
 }
 
@@ -96,6 +98,7 @@ export default function MiIva() {
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const [rutRegistro, setRutRegistro] = useState("");
   const [erroresRegistro, setErroresRegistro] = useState<ErroresRegistro>({});
   const [authCargando, setAuthCargando] = useState(false);
@@ -274,6 +277,7 @@ export default function MiIva() {
       errs.email = "Revisa el correo: debe tener una @ (ejemplo: rosa@gmail.com).";
     }
     if (password.length < 8) errs.password = "La contraseña debe tener al menos 8 letras o números.";
+    if (!aceptaTerminos) errs.terminos = "Para crear tu cuenta debes aceptar los términos y la política de privacidad.";
     return errs;
   };
 
@@ -316,6 +320,7 @@ export default function MiIva() {
               ...(token ? { turnstileToken: token } : {}),
             })
           : await login(email.trim(), password, token);
+      if (modo === "register") registrarEvento("cuenta_creada");
       setUsuario(res.user);
       setPassword("");
       recienEntro.current = true;
@@ -398,9 +403,14 @@ export default function MiIva() {
     setSiiOk(null);
     try {
       const r = await sincronizarSii(periodo);
+      const errores = (r.compras.errores ?? 0) + (r.ventas.errores ?? 0);
       setSyncMsg(
-        `Listo: trajimos ${r.compras.n} ${r.compras.n === 1 ? "factura de compra" : "facturas de compra"} y ${r.ventas.n} ${r.ventas.n === 1 ? "factura de venta" : "facturas de venta"} de ${mesLargo(periodo)}.`
+        `${errores > 0 ? "Traído en parte" : "Listo"}: trajimos ${r.compras.n} ${r.compras.n === 1 ? "factura de compra" : "facturas de compra"} y ${r.ventas.n} ${r.ventas.n === 1 ? "factura de venta" : "facturas de venta"} de ${mesLargo(periodo)}.` +
+          (errores > 0
+            ? ` ${errores === 1 ? "Hubo 1 problema" : `Hubo ${errores} problemas`} al guardar o leer los libros: tu IVA puede estar incompleto. Vuelve a sincronizar en unos minutos o escríbenos por WhatsApp.`
+            : "")
       );
+      registrarEvento("sii_sincronizado", { errores });
       setEmpresa(await getEmpresa());
       await cargarCierre();
     } catch (e) {
@@ -1001,6 +1011,33 @@ export default function MiIva() {
                   </label>
                 )}
 
+                {modo === "register" && (
+                  <div>
+                    <label className="flex items-start gap-3 min-h-[44px] cursor-pointer">
+                      <input
+                        id="acepta-terminos"
+                        type="checkbox"
+                        checked={aceptaTerminos}
+                        onChange={(e) => setAceptaTerminos(e.target.checked)}
+                        aria-invalid={Boolean(erroresRegistro.terminos)}
+                        className="mt-1 h-5 w-5 shrink-0 accent-cancha"
+                      />
+                      <span className="text-base text-papel leading-snug">
+                        Acepto los{" "}
+                        <a href="/terminos/" target="_blank" rel="noreferrer" className="text-cancha underline underline-offset-4">
+                          términos del servicio
+                        </a>{" "}
+                        y la{" "}
+                        <a href="/privacidad/" target="_blank" rel="noreferrer" className="text-cancha underline underline-offset-4">
+                          política de privacidad
+                        </a>
+                        .
+                      </span>
+                    </label>
+                    {erroresRegistro.terminos && <p role="alert" className={errorTxt}>{erroresRegistro.terminos}</p>}
+                  </div>
+                )}
+
                 <Turnstile key={captchaKey} onToken={setCaptchaToken} />
 
                 {mensajeError(authError)}
@@ -1250,6 +1287,15 @@ export default function MiIva() {
                           </dt>
                           <dd className="whitespace-nowrap font-mono text-papel">− {clp(cierre.creditoFiscal)}</dd>
                         </div>
+                        {(cierre.remanenteAnterior ?? 0) > 0 && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-humo">
+                              Menos lo que te sobró de meses anteriores
+                              <span className="block text-sm">(remanente de crédito fiscal, sin reajuste)</span>
+                            </dt>
+                            <dd className="whitespace-nowrap font-mono text-papel">− {clp(cierre.remanenteAnterior ?? 0)}</dd>
+                          </div>
+                        )}
                         <div className="flex justify-between gap-4 border-t border-linea pt-4">
                           <dt className="text-papel">IVA a pagar</dt>
                           <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ivaAPagar)}</dd>

@@ -8,7 +8,11 @@
  *   día 12 → último día (multa 10% + 2%/mes)
  *
  * Los montos se calculan desde documents (misma lógica que /api/cierre).
+ * El período de los avisos y montos es el que se declara: el mes ANTERIOR.
  */
+import { periodoTributario as _periodoTributario } from './periodo.logic.mjs';
+
+const periodoTributario: (fecha: string) => string = _periodoTributario;
 
 export interface DatosEmpresa {
   companyId: string;
@@ -30,16 +34,20 @@ export interface AlertaGenerada {
   mensaje: string;
 }
 
-export function hoyEnChile(): { fecha: string; dia: number; periodo: string } {
+/**
+ * Fecha y día de hoy en Chile, y `periodo`: el período tributario que se declara
+ * este mes (el mes anterior). `mes` es el mes calendario en curso.
+ */
+export function hoyEnChile(ahora: Date = new Date()): { fecha: string; dia: number; periodo: string; mes: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Santiago',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(ahora);
   const get = (t: string) => parts.find((p) => p.type === t)!.value;
   const fecha = `${get('year')}-${get('month')}-${get('day')}`;
-  return { fecha, dia: Number(get('day')), periodo: fecha.slice(0, 7) };
+  return { fecha, dia: Number(get('day')), periodo: periodoTributario(fecha), mes: fecha.slice(0, 7) };
 }
 
 const MESES = [

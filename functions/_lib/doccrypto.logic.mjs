@@ -72,17 +72,35 @@ export function derivarLlaves(masterHex) {
   return p;
 }
 
-/** Normaliza un documento a los campos que se guardan (todo lo demás se ignora). */
+/** Tipos de DTE de nota de crédito (61 electrónica, 112 de exportación): restan. */
+export const TIPOS_NOTA_CREDITO = [61, 112];
+
+/** Código de tipo de DTE como entero, o null si no viene / no es un código. */
+function tipoDocDe(v) {
+  const n = Number(v);
+  return v != null && v !== '' && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Normaliza un documento a los campos que se guardan (todo lo demás se ignora).
+ * Las notas de crédito quedan siempre con montos negativos, vengan como vengan.
+ */
 export function normalizarDoc(d) {
   const folio = d.folio == null ? null : String(d.folio).trim() || null;
+  const tipoDoc = tipoDocDe(d.tipoDoc);
+  const neto = Math.round(Number(d.neto) || 0);
+  const iva = Math.round(Number(d.iva) || 0);
+  const total = d.total == null ? Math.round((Number(d.neto) || 0) + (Number(d.iva) || 0)) : Math.round(Number(d.total) || 0);
+  const signo = (x) => (TIPOS_NOTA_CREDITO.includes(tipoDoc) ? -Math.abs(x) : x);
   return {
     fecha: d.fecha ? String(d.fecha).slice(0, 10) : null,
     rutEmisor: d.rutEmisor ? String(d.rutEmisor).trim() : null,
     folio,
+    tipoDoc,
     razonSocial: d.razonSocial ? String(d.razonSocial).trim().slice(0, 200) : null,
-    neto: Math.round(Number(d.neto) || 0),
-    iva: Math.round(Number(d.iva) || 0),
-    total: d.total == null ? Math.round((Number(d.neto) || 0) + (Number(d.iva) || 0)) : Math.round(Number(d.total) || 0),
+    neto: signo(neto),
+    iva: signo(iva),
+    total: signo(total),
   };
 }
 
@@ -108,13 +126,17 @@ export async function descifrarDoc(masterHex, blob) {
 }
 
 /**
- * Índice ciego para duplicados: HMAC(company_id | tipo | folio | rutEmisor).
- * Determinístico por llave; no revela folio ni RUT.
+ * Índice ciego para duplicados: HMAC(company_id | tipo | folio | rutEmisor [| "dte" | tipoDoc]).
+ * Determinístico por llave; no revela folio ni RUT. El tipo de DTE distingue una factura
+ * de la nota de crédito con el mismo folio y RUT. Sin tipoDoc (documentos guardados antes
+ * de leerlo) el mensaje es el original, así su índice no cambia.
  */
 export async function hashDoc(masterHex, companyId, tipo, doc) {
   const { mac } = await derivarLlaves(masterHex);
   const n = normalizarDoc(doc);
-  const msg = [companyId, tipo, n.folio ?? '', (n.rutEmisor ?? '').replace(/[^0-9kK]/g, '').toUpperCase()].join('\u0000');
+  const partes = [companyId, tipo, n.folio ?? '', (n.rutEmisor ?? '').replace(/[^0-9kK]/g, '').toUpperCase()];
+  if (n.tipoDoc != null) partes.push('dte', String(n.tipoDoc));
+  const msg = partes.join('\u0000');
   const sig = await subtle.sign('HMAC', mac, te.encode(msg));
   return bytesToHex(new Uint8Array(sig));
 }
@@ -151,7 +173,7 @@ export async function descifrarDocAlguno(llavero, companyId, blob) {
   if (typeof blob === 'string' && blob.startsWith('v1.')) {
     for (const l of llavero.llaves) {
       try {
-        return await descifrarDoc(l.hex, blob);
+        return normalizarDoc(await descifrarDoc(l.hex, blob));
       } catch {
         /* siguiente llave */
       }
@@ -167,4 +189,16 @@ export async function descifrarDocAlguno(llavero, companyId, blob) {
  */
 export async function hashesDoc(llavero, companyId, tipo, doc) {
   return Promise.all(llavero.llaves.map((l) => hashDoc(l.hex, companyId, tipo, doc)));
+}
+
+/**
+ * ¿Una fila guardada sin tipoDoc (antes de leer "Tipo Doc") es el mismo documento que
+ * uno entrante con su mismo índice sin tipo? Mismos montos en valor absoluto: así una
+ * nota de crédito guardada en positivo también calza. Si no calza, es otro documento
+ * (p.ej. la NC del mismo folio y RUT que antes se descartó como duplicado).
+ */
+export function mismoDocSinTipo(guardado, entrante) {
+  const a = normalizarDoc(guardado);
+  const b = normalizarDoc(entrante);
+  return a.tipoDoc == null && Math.abs(a.neto) === Math.abs(b.neto) && Math.abs(a.iva) === Math.abs(b.iva);
 }

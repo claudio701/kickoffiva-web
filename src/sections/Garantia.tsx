@@ -10,12 +10,12 @@ export default function Garantia() {
           </p>
           <div>
             <h2 className="headline text-3xl sm:text-4xl">
-              Levantamientos logrados en 10 días hábiles. Garantizado.
+              Tu levantamiento, entregado en 10 días hábiles. Garantizado.
             </h2>
             <p className="mt-5 text-humo leading-relaxed max-w-xl">
               Subes la información de tu empresa, cotizamos el valor exacto y partimos.{" "}
               <strong className="text-papel font-semibold">
-                Si no la levantamos en 10 días hábiles, te devolvemos el 50% del fee.
+                Si no entregamos el levantamiento en 10 días hábiles desde que recibimos todos tus antecedentes, te devolvemos el 50% del fee.
               </strong>
             </p>
             <div className="mt-7 rounded-xl border border-cancha/40 bg-cancha/5 p-5 sm:p-6">
@@ -23,8 +23,8 @@ export default function Garantia() {
                 Garantía Anti-Multa
               </p>
               <p className="mt-3 text-sm sm:text-base text-papel leading-relaxed">
-                Levantamos tu anotación en 10 días hábiles o te devolvemos el 50% del fee.
-                Firmada en tu contrato — no es marketing, es una obligación nuestra.
+                Entregamos el levantamiento de tu anotación en 10 días hábiles, contados desde que
+                tenemos todos tus antecedentes, o te devolvemos el 50% del fee. Firmada en tu contrato.
               </p>
             </div>
             <div className="mt-7 flex flex-wrap items-center gap-5">

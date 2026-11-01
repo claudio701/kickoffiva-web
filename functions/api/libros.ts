@@ -75,6 +75,8 @@ interface UploadDoc {
   fecha?: string;
   rutEmisor?: string;
   folio?: string | number;
+  /** Tipo de DTE opcional; con 61/112 (nota de crédito) los montos se guardan en negativo. */
+  tipoDoc?: number;
   neto?: number;
   iva?: number;
   total?: number;
@@ -144,6 +146,7 @@ libros.post('/upload', async (c) => {
       fecha: d.fecha ?? null,
       rutEmisor: d.rutEmisor ?? null,
       folio: String(d.folio).trim(),
+      tipoDoc: d.tipoDoc ?? null,
       razonSocial: d.razonSocial ?? null,
       neto,
       iva,

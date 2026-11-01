@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { clp } from "../config";
 import { BotonEntrar, BotonConversar } from "../components/Botones";
+import { registrarEvento } from "../lib/analitica";
 
 export const CALC_STORAGE_KEY = "kickoffiva_calc";
 
@@ -25,11 +26,13 @@ export function leerCalcGuardada(): CalcGuardada | null {
 
 // Modelo referencial y transparente:
 // - IVA débito estimado: 19% de las ventas del mes (simplificación, sin crédito fiscal)
-// - Multa por atraso F29: 10% del impuesto el primer mes + 2% por cada mes adicional (tope legal real)
+// - Multa por atraso F29 (art. 97 N°11 inc. 1° del Código Tributario): 10% del impuesto + 2% por
+//   cada mes adicional de atraso, con tope de 30%. Cada F29 atrasado tiene su propia antigüedad.
 // - Intereses: 1,5% mensual sobre el impuesto, acumulándose por cada mes de atraso
 const IVA_TASA = 0.19;
 const MULTA_BASE = 0.10;
 const MULTA_MES_EXTRA = 0.02;
+const MULTA_TOPE = 0.30;
 const INTERES_MES = 0.015;
 
 /** Botones − / + grandes: deslizar con el dedo un valor exacto es difícil en el celular. */
@@ -69,9 +72,13 @@ export default function Calculadora() {
 
   const r = useMemo(() => {
     const iva = ventas * IVA_TASA;
-    const multaPorMes = iva * (MULTA_BASE + Math.max(0, meses - 1) * MULTA_MES_EXTRA);
+    // El F29 más antiguo lleva `meses` de atraso, el más reciente 1.
+    let multa = 0;
+    for (let k = 1; k <= meses; k++) {
+      multa += iva * Math.min(MULTA_TOPE, MULTA_BASE + (k - 1) * MULTA_MES_EXTRA);
+    }
     const intereses = iva * INTERES_MES * (meses * (meses + 1)) / 2;
-    const estimado = multaPorMes * meses + intereses;
+    const estimado = multa + intereses;
     const total = estimado + pagadas;
     return { iva, estimado, total };
   }, [ventas, meses, pagadas]);
@@ -88,6 +95,10 @@ export default function Calculadora() {
       /* storage no disponible */
     }
   }, [ventas, meses, pagadas, tocado]);
+
+  useEffect(() => {
+    if (tocado) registrarEvento("calculadora_usada");
+  }, [tocado]);
 
   const cambiarVentas = (v: number) => { setTocado(true); setVentas(v); };
   const cambiarMeses = (v: number) => { setTocado(true); setMeses(v); };
