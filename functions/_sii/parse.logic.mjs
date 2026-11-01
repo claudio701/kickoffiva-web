@@ -6,9 +6,11 @@
  *   - Separador `;` (se tolera `,` si domina en la cabecera)
  *   - Números en formato chileno: puntos como miles ("1.234.567"),
  *     coma decimal opcional, negativos con "-" o paréntesis contables "(1.190)"
- *   - Cabeceras en español, orden variable: "Fecha Docto", "Nro"/"Folio",
+ *   - Cabeceras en español, orden variable: "Fecha Docto", "Nro"/"Folio", "Tipo Doc",
  *     "RUT Proveedor"/"RUT Cliente"/"RUT", "Razon Social",
  *     "Monto Neto", "Monto IVA"/"Monto IVA Recuperable"/"IVA", "Monto Total"
+ *   - "Tipo Doc": código de DTE (33, 61…) o su nombre ("Nota de Credito Electronica").
+ *     Las notas de crédito (61 y 112) salen siempre con montos negativos.
  *   - Filas finales de resumen/totales (sin fecha ni folio) que se omiten
  *   - BOM UTF-8 opcional
  *
@@ -137,6 +139,28 @@ function buscar(headers, aliases) {
   return -1;
 }
 
+/** Códigos de DTE de nota de crédito: 61 (electrónica) y 112 (de exportación). */
+const TIPOS_NOTA_CREDITO = [61, 112];
+
+/**
+ * Celda "Tipo Doc" → código de DTE. Acepta el código ("33", "61") o el nombre del
+ * documento. Un nombre irreconocible → null (el documento se guarda sin tipo).
+ */
+export function parseTipoDoc(valor) {
+  const s = String(valor ?? '').trim();
+  if (/^\d{2,3}$/.test(s)) return Number(s);
+  const n = normalizarHeader(s);
+  if (!n) return null;
+  const exp = n.includes('exportacion');
+  if (n.includes('notadecredito')) return exp ? 112 : 61;
+  if (n.includes('notadedebito')) return exp ? 111 : 56;
+  if (n.includes('facturadeexportacion')) return 110;
+  if (n.includes('facturadecompra')) return 46;
+  if (n.includes('exenta') || n.includes('noafecta')) return 34;
+  if (n.includes('factura')) return 33;
+  return null;
+}
+
 function mapearColumnas(headersRaw) {
   const h = headersRaw.map(normalizarHeader);
   return {
@@ -146,6 +170,7 @@ function mapearColumnas(headersRaw) {
     fecha: buscar(h, ['fechadocto', 'fechaemision', 'fechadoc', 'fchdoc', 'fecha']),
     rutEmisor: buscar(h, ['rutproveedor', 'rutcliente', 'rutemisor', 'rutdoc', 'rut']),
     folio: buscar(h, ['folio', 'foliodoc', 'nrodoc', 'numerodoc', 'numdoc', 'nro']),
+    tipoDoc: buscar(h, ['tipodoc', 'tipodocto', 'tipodte', 'tipodocumento']),
     neto: buscar(h, ['montoneto', 'mntneto', 'totneto', 'neto']),
     iva: buscar(h, ['montoivarecuperable', 'montoiva', 'mntiva', 'totiva', 'iva']),
     total: buscar(h, ['montototal', 'mnttotal', 'montodocumento', 'tottotal', 'total']),
@@ -169,7 +194,7 @@ function esFilaResumen(celdaFecha, celdaFolio, cols) {
 
 /**
  * Parsea un CSV del RCV y devuelve documentos normalizados:
- *   { fecha:"YYYY-MM-DD", rutEmisor, folio:string, neto:int, iva:int, total:int, razonSocial }
+ *   { fecha:"YYYY-MM-DD", rutEmisor, folio:string, tipoDoc:int|null, neto:int, iva:int, total:int, razonSocial }
  *
  * @param {string} texto contenido del CSV (con o sin BOM)
  * @param {'compra'|'venta'|'compras'|'ventas'} tipo lado del registro (afecta
@@ -215,13 +240,16 @@ export function parseRcvCsv(texto, tipo = 'compra') {
     const celdaFecha = celda(mapa.fecha);
     const celdaFolio = celda(mapa.folio);
     if (esFilaResumen(celdaFecha, celdaFolio, cols)) continue; // totales/resumen finales
+    const tipoDoc = parseTipoDoc(celda(mapa.tipoDoc));
+    const signo = (x) => (TIPOS_NOTA_CREDITO.includes(tipoDoc) ? -Math.abs(x) : x);
     docs.push({
       fecha: parseFecha(celdaFecha),
       rutEmisor: normalizarRut(celda(mapa.rutEmisor)),
       folio: String(celdaFolio),
-      neto: parseNumeroChileno(celda(mapa.neto)),
-      iva: parseNumeroChileno(celda(mapa.iva)),
-      total: parseNumeroChileno(celda(mapa.total)),
+      tipoDoc,
+      neto: signo(parseNumeroChileno(celda(mapa.neto))),
+      iva: signo(parseNumeroChileno(celda(mapa.iva))),
+      total: signo(parseNumeroChileno(celda(mapa.total))),
       razonSocial: celda(mapa.razonSocial) || null,
     });
   }

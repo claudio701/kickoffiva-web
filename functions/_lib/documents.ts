@@ -18,6 +18,7 @@ import {
   cifrarDocV2 as _cifrarV2,
   descifrarDocAlguno as _descifrarAlguno,
   hashesDoc as _hashes,
+  mismoDocSinTipo as _mismoSinTipo,
 } from './doccrypto.logic.mjs';
 import { prefijoActual as _prefijoActual } from './keyring.logic.mjs';
 
@@ -25,6 +26,8 @@ export interface DocGuardado {
   fecha: string | null;
   rutEmisor: string | null;
   folio: string | null;
+  /** Tipo de DTE (33 factura, 61 nota de crédito…); null en documentos guardados antes de leerlo. */
+  tipoDoc: number | null;
   razonSocial: string | null;
   neto: number;
   iva: number;
@@ -34,6 +37,7 @@ export interface DocEntrada {
   fecha?: string | null;
   rutEmisor?: string | null;
   folio?: string | number | null;
+  tipoDoc?: number | string | null;
   razonSocial?: string | null;
   neto?: number;
   iva?: number;
@@ -52,6 +56,7 @@ const cifrarDocV2: (l: Llavero, companyId: string, d: DocEntrada) => Promise<str
 const descifrarDocAlguno: (l: Llavero, companyId: string, blob: string) => Promise<DocGuardado> = _descifrarAlguno;
 const hashesDoc: (l: Llavero, companyId: string, tipo: string, d: DocEntrada) => Promise<string[]> = _hashes;
 const prefijoActual: (l: Llavero) => string = _prefijoActual;
+const mismoDocSinTipo: (guardado: DocGuardado, entrante: DocEntrada) => boolean = _mismoSinTipo;
 
 const COLUMNAS_LEGACY = ['fecha', 'rut_emisor', 'folio', 'razon_social', 'neto', 'iva', 'total'] as const;
 
@@ -120,6 +125,27 @@ export async function insertDoc(
       [companyId, hashes.slice(1)],
     );
     if (ya.length > 0) return false;
+  }
+  // Índice sin tipo de DTE: el que tienen los documentos guardados antes de leer "Tipo Doc".
+  // Si esa fila es el mismo documento, se actualiza en su lugar (blob con tipoDoc + índice
+  // nuevo) y cuenta como duplicado; si no (la NC del mismo folio y RUT), se inserta aparte.
+  if (normalizarDoc(doc).tipoDoc != null) {
+    const sinTipo = await hashesDoc(llavero, companyId, tipo, { ...doc, tipoDoc: null });
+    const previas = await selectDocs(env, `WHERE company_id = $1 AND doc_hash = ANY($2::text[])`, [companyId, sinTipo]);
+    for (const r of previas) {
+      if (!mismoDocSinTipo(await decodificar(llavero, r), doc)) continue;
+      const limpiarLegacy = (await hayColumnasLegacy(env))
+        ? ', ' + COLUMNAS_LEGACY.map((c) => `${c} = NULL`).join(', ')
+        : '';
+      await q(
+        env,
+        `UPDATE documents SET datos_enc = $2, doc_hash = $3${limpiarLegacy}
+          WHERE id = $1
+            AND NOT EXISTS (SELECT 1 FROM documents d2 WHERE d2.company_id = $4 AND d2.doc_hash = $3 AND d2.id <> $1)`,
+        [r.id, blob, hashes[0], companyId],
+      );
+      return false;
+    }
   }
   const rows = (await q(
     env,

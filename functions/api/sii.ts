@@ -127,6 +127,7 @@ async function handleSincronizar(c: any): Promise<Response> {
         // Cifrado en la app + índice ciego: el duplicado no inserta (idempotente).
         await insertDoc(c.env, companyId, periodoDb, tipo, {
           folio: doc.folio,
+          tipoDoc: doc.tipoDoc,
           rutEmisor: doc.rutEmisor,
           fecha: doc.fecha,
           neto: doc.neto,
