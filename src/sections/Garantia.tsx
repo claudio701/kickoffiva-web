@@ -38,7 +38,7 @@ export default function Garantia() {
               </a>
               <a
                 href="/servicios/levantamiento-anotaciones/"
-                className="text-sm font-medium text-humo hover:text-cancha transition-colors"
+                className="inline-flex min-h-[44px] items-center text-sm font-medium text-humo hover:text-cancha transition-colors"
               >
                 Ver detalle del servicio →
               </a>

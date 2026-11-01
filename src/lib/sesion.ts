@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 /** Aviso interno cuando se inicia o cierra sesión (lo emiten setToken/clearToken). */
 export const EVENTO_SESION = "kickoffiva-sesion";
-/** Pide a Mi IVA mostrar "Ya tengo cuenta" o "Soy nuevo" (detail: "login" | "register"). */
+/** Pide a Mi IVA mostrar "Ya tengo cuenta", "Soy nuevo" o recuperar contraseña (detail: "login" | "register" | "recuperar"). */
 export const EVENTO_MODO = "kickoffiva-modo";
 
 export function tieneSesion(): boolean {
@@ -29,7 +29,7 @@ export function useSesion(): boolean {
   return activa;
 }
 
-/** Lleva a la sección de entrada en el modo pedido. */
-export function irAEntrar(modo: "login" | "register") {
+/** Lleva a la sección de entrada en el modo pedido ("recuperar" abre "¿Olvidaste tu contraseña?"). */
+export function irAEntrar(modo: "login" | "register" | "recuperar") {
   window.dispatchEvent(new CustomEvent(EVENTO_MODO, { detail: modo }));
 }

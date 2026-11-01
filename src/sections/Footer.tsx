@@ -24,15 +24,15 @@ export default function Footer() {
             </p>
           </div>
 
-          <nav className="grid grid-cols-2 gap-x-14 gap-y-3 text-sm">
-            <a href="#como-funciona" className="text-humo hover:text-papel transition-colors">Cómo funciona</a>
-            <a href="#plan" className="text-humo hover:text-papel transition-colors">Plan a Todo Evento</a>
-            <a href="#servicios" className="text-humo hover:text-papel transition-colors">Servicios</a>
-            <a href="#faq" className="text-humo hover:text-papel transition-colors">Preguntas</a>
-            <a href="/privacidad/" className="text-humo hover:text-papel transition-colors">Privacidad</a>
-            <a href="/terminos/" className="text-humo hover:text-papel transition-colors">Términos</a>
-            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="text-humo hover:text-cancha transition-colors">WhatsApp</a>
-            <a href={KICKOFF_URL} target="_blank" rel="noreferrer" className="text-humo hover:text-cancha transition-colors">kickoff.cl</a>
+          <nav className="grid grid-cols-2 gap-x-14 gap-y-0 text-sm">
+            <a href="#como-funciona" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Cómo funciona</a>
+            <a href="#plan" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Plan a Todo Evento</a>
+            <a href="#servicios" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Servicios</a>
+            <a href="#faq" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Preguntas</a>
+            <a href="/privacidad/" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Privacidad</a>
+            <a href="/terminos/" className="inline-flex min-h-[44px] items-center text-humo hover:text-papel transition-colors">Términos</a>
+            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] items-center text-humo hover:text-cancha transition-colors">WhatsApp</a>
+            <a href={KICKOFF_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-[44px] items-center text-humo hover:text-cancha transition-colors">kickoff.cl</a>
           </nav>
         </div>
 

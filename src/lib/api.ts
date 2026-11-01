@@ -160,6 +160,9 @@ export function setActiveCompanyId(id: string | null): void {
 
 // ─── Fetch base ─────────────────────────────────────────────────────────────
 
+const SIN_CONEXION = "No pudimos conectarnos. Revisa tu internet (wifi o datos) e intenta de nuevo.";
+const FALLA_NUESTRA = "Algo falló de nuestro lado. Intenta de nuevo en unos minutos.";
+
 interface FetchOpts {
   /** false = llamada pública (login/register): no envía token ni trata 401 como sesión expirada. */
   auth?: boolean;
@@ -179,7 +182,13 @@ async function apiFetch(
   const companyId = usaSesion ? getActiveCompanyId() : null;
   if (companyId) headers["x-company-id"] = companyId;
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  } catch {
+    // Sin internet o servidor inalcanzable: el navegador lanza "Failed to fetch" / "Load failed".
+    throw new ApiError(SIN_CONEXION, 0);
+  }
 
   // 401 con token enviado → sesión expirada o inválida: limpiar y avisar.
   // (Un 401 de login/register es "credenciales inválidas", no expiración.)
@@ -194,12 +203,13 @@ async function apiFetch(
 async function errorMessage(res: Response): Promise<string> {
   try {
     const data = (await res.json()) as { error?: unknown };
-    if (typeof data?.error === "string" && data.error) return data.error;
+    // Un 500 trae texto técnico ("Error interno del servidor"); los 503 sí traen un mensaje pensado para la persona.
+    if (typeof data?.error === "string" && data.error && res.status !== 500) return data.error;
   } catch {
     /* cuerpo no-JSON */
   }
   return res.status >= 500
-    ? "Algo falló de nuestro lado. Intenta de nuevo en unos minutos."
+    ? FALLA_NUESTRA
     : `No pudimos completar la acción (código ${res.status}). Intenta de nuevo.`;
 }
 
@@ -210,7 +220,12 @@ async function apiJson<T>(
 ): Promise<T> {
   const res = await apiFetch(path, init, opts);
   if (!res.ok) throw new ApiError(await errorMessage(res), res.status);
-  return res.json() as Promise<T>;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    // Respuesta cortada o vacía ("Unexpected end of JSON input").
+    throw new ApiError(FALLA_NUESTRA, res.status);
+  }
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────

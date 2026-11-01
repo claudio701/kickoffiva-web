@@ -25,7 +25,7 @@ export default function Header() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300 ${
-        scrolled || open ? "border-linea bg-tinta/90 backdrop-blur-md" : "border-transparent"
+        scrolled || open ? "border-linea bg-tinta/95" : "border-transparent"
       }`}
     >
       <div className="wrap flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4">
@@ -85,7 +85,7 @@ export default function Header() {
 
       {/* Menú móvil */}
       {open && (
-        <nav className="lg:hidden border-t border-linea bg-tinta/95 backdrop-blur-md">
+        <nav className="lg:hidden border-t border-linea bg-tinta">
           <div className="wrap py-4 flex flex-col">
             {NAV.map((n) => (
               <a
