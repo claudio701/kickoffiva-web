@@ -953,7 +953,7 @@ export default function MiIva() {
                 )}
 
                 <label className="block">
-                  <span className={labelTxt}>{modo === "register" ? "Inventa una contraseña" : "Tu contraseña"}</span>
+                  <span className={labelTxt}>{modo === "register" ? "Crea una contraseña" : "Tu contraseña"}</span>
                   <div className="flex gap-2">
                     <input
                       type={verPassword ? "text" : "password"}
