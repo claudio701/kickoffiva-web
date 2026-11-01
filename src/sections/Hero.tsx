@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { BotonEntrar, BotonConversar } from "../components/Botones";
 
 const DOLORES = [
@@ -12,6 +13,18 @@ const DOLORES = [
 ];
 
 export default function Hero() {
+  // El ticker se pausa cuando sale de pantalla: una animación infinita mantiene
+  // la pantalla redibujándose aunque nadie la mire.
+  const ticker = useRef<HTMLDivElement>(null);
+  const [tickerVisible, setTickerVisible] = useState(true);
+  useEffect(() => {
+    const el = ticker.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(([e]) => setTickerVisible(e.isIntersecting));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <section className="relative pt-28 sm:pt-36 pb-0 overflow-hidden">
       <div className="wrap">
@@ -47,8 +60,10 @@ export default function Hero() {
       </div>
 
       {/* Ticker de dolores */}
-      <div className="mt-14 sm:mt-20 border-y border-linea py-3 overflow-hidden" aria-hidden="true">
-        <div className="flex w-max animate-marquee gap-0 whitespace-nowrap">
+      <div ref={ticker} className="mt-14 sm:mt-20 border-y border-linea py-3 overflow-hidden" aria-hidden="true">
+        <div
+          className={`flex w-max animate-marquee gap-0 whitespace-nowrap ${tickerVisible ? "" : "[animation-play-state:paused]"}`}
+        >
           {[0, 1].map((dup) => (
             <div key={dup} className="flex shrink-0">
               {DOLORES.map((d) => (

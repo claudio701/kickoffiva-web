@@ -61,6 +61,8 @@ const TEMAS: Tema[] = [
 const WA_AYUDA = waUrl("Hola, me ayuda Kiko pero necesito hablar con una persona.");
 
 /** El muñequito: cara redonda, sonrisa y mano saludando. Colores de la marca. */
+// La mano saluda unas pocas veces y se queda quieta: una animación infinita dentro
+// de un SVG obliga al navegador a redibujar cada cuadro y gasta batería sin parar.
 function Personaje({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
@@ -74,7 +76,7 @@ function Personaje({ className = "" }: { className?: string }) {
       <circle cx="18" cy="41" r="3" fill="#E9A13B" opacity="0.55" />
       <circle cx="46" cy="41" r="3" fill="#E9A13B" opacity="0.55" />
       <path d="M24 43 Q32 50 40 43" stroke="#0C0C0A" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <g className="origin-[56px_44px] motion-safe:animate-[saludo_1.6s_ease-in-out_infinite]">
+      <g className="origin-[56px_44px] motion-safe:animate-[saludo_1.6s_ease-in-out_3]">
         <circle cx="57" cy="40" r="5.5" fill="#C8F04A" stroke="#0C0C0A" strokeWidth="2" />
       </g>
     </svg>
@@ -85,23 +87,24 @@ export default function Asistente() {
   const [abierto, setAbierto] = useState(false);
   const [tema, setTema] = useState<Tema | null>(null);
   const [saludo, setSaludo] = useState(false);
+  // Sube solo cuando aparece el globo: cambia el key del muñequito y lo hace saludar otra vez.
+  const [olas, setOlas] = useState(0);
   // Sobre el área de entrar/cuenta el botón flotante tapaba campos: ahí se esconde
   // (los botones "¿Te complicaste?" de esa sección igual abren a Kiko).
   const [sobreCuenta, setSobreCuenta] = useState(false);
   const dialogo = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const revisar = () => {
-      const r = document.getElementById("mi-iva")?.getBoundingClientRect();
-      setSobreCuenta(r ? r.top < window.innerHeight * 0.85 && r.bottom > window.innerHeight * 0.15 : false);
-    };
-    revisar();
-    window.addEventListener("scroll", revisar, { passive: true });
-    window.addEventListener("resize", revisar);
-    return () => {
-      window.removeEventListener("scroll", revisar);
-      window.removeEventListener("resize", revisar);
-    };
+    // IntersectionObserver en vez de medir en cada scroll (getBoundingClientRect
+    // forzaba un recálculo de layout por evento). El margen deja la franja central
+    // del 15%–85% de la pantalla, igual que el cálculo anterior.
+    const miIva = document.getElementById("mi-iva");
+    if (!miIva || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(([e]) => setSobreCuenta(e.isIntersecting), {
+      rootMargin: "-15% 0px -15% 0px",
+    });
+    obs.observe(miIva);
+    return () => obs.disconnect();
   }, []);
 
   // Al abrir: foco dentro del diálogo; Escape lo cierra.
@@ -141,6 +144,7 @@ export default function Asistente() {
     if (visto || window.innerWidth < 640) return;
     const mostrar = setTimeout(() => {
       setSaludo(true);
+      setOlas((n) => n + 1);
       try {
         sessionStorage.setItem("kiko_saludo", "1");
       } catch {
@@ -255,7 +259,8 @@ export default function Asistente() {
         aria-expanded={abierto}
         className="h-16 w-16 rounded-full border-2 border-tinta bg-panel shadow-xl transition-transform hover:scale-105"
       >
-        <Personaje className="h-full w-full" />
+        {/* key: al aparecer el globo, Kiko vuelve a saludar (reinicia la animación). */}
+        <Personaje key={olas} className="h-full w-full" />
       </button>
     </div>
   );
