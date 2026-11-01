@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { clp } from "../config";
 import { BotonEntrar, BotonConversar } from "../components/Botones";
+import { calcularMultas, MULTA_TOPE, TASA_PENAL, tasaDesactualizada } from "../lib/multas";
 
 export const CALC_STORAGE_KEY = "kickoffiva_calc";
 
 export interface CalcGuardada {
   ventas: number;
+  compras?: number;
   meses: number;
   pagadas: number;
   ts: number;
@@ -23,14 +25,8 @@ export function leerCalcGuardada(): CalcGuardada | null {
   }
 }
 
-// Modelo referencial y transparente:
-// - IVA débito estimado: 19% de las ventas del mes (simplificación, sin crédito fiscal)
-// - Multa por atraso F29: 10% del impuesto el primer mes + 2% por cada mes adicional (tope legal real)
-// - Intereses: 1,5% mensual sobre el impuesto, acumulándose por cada mes de atraso
-const IVA_TASA = 0.19;
-const MULTA_BASE = 0.10;
-const MULTA_MES_EXTRA = 0.02;
-const INTERES_MES = 0.015;
+// El cálculo y su base legal (art. 97 N°11 y art. 53 del Código Tributario, Ley 21.713)
+// están en ../lib/multas.ts.
 
 /** Botones − / + grandes: deslizar con el dedo un valor exacto es difícil en el celular. */
 function Ajustar({
@@ -64,17 +60,14 @@ function Ajustar({
 
 export default function Calculadora() {
   const [ventas, setVentas] = useState(3000000);
+  const [compras, setCompras] = useState(1500000);
   const [meses, setMeses] = useState(2);
   const [pagadas, setPagadas] = useState(150000);
 
   const r = useMemo(() => {
-    const iva = ventas * IVA_TASA;
-    const multaPorMes = iva * (MULTA_BASE + Math.max(0, meses - 1) * MULTA_MES_EXTRA);
-    const intereses = iva * INTERES_MES * (meses * (meses + 1)) / 2;
-    const estimado = multaPorMes * meses + intereses;
-    const total = estimado + pagadas;
-    return { iva, estimado, total };
-  }, [ventas, meses, pagadas]);
+    const m = calcularMultas(ventas, compras, meses);
+    return { ...m, iva: m.ivaMes, total: m.estimado + pagadas };
+  }, [ventas, compras, meses, pagadas]);
 
   // Guardar los valores para que Mi IVA los retome al registrarse, solo si la
   // persona movió algo (si no, le atribuiríamos números que nunca escribió).
@@ -82,14 +75,15 @@ export default function Calculadora() {
   useEffect(() => {
     if (!tocado) return;
     try {
-      const data: CalcGuardada = { ventas, meses, pagadas, ts: Date.now() };
+      const data: CalcGuardada = { ventas, compras, meses, pagadas, ts: Date.now() };
       localStorage.setItem(CALC_STORAGE_KEY, JSON.stringify(data));
     } catch {
       /* storage no disponible */
     }
-  }, [ventas, meses, pagadas, tocado]);
+  }, [ventas, compras, meses, pagadas, tocado]);
 
   const cambiarVentas = (v: number) => { setTocado(true); setVentas(v); };
+  const cambiarCompras = (v: number) => { setTocado(true); setCompras(v); };
   const cambiarMeses = (v: number) => { setTocado(true); setMeses(v); };
   const cambiarPagadas = (v: number) => { setTocado(true); setPagadas(v); };
 
@@ -106,7 +100,7 @@ export default function Calculadora() {
           <div className="space-y-8">
             <label className="block">
               <span className="flex items-baseline justify-between gap-4">
-                <span className="text-base font-semibold">Ventas mensuales aprox.</span>
+                <span className="text-base font-semibold">Ventas mensuales aprox. (sin IVA)</span>
                 <span className="font-mono text-lg text-cancha">{clp(ventas)}</span>
               </span>
               <input
@@ -120,6 +114,25 @@ export default function Calculadora() {
                 aria-label="Ventas mensuales aproximadas"
               />
               <Ajustar valor={ventas} min={500000} max={40000000} paso={500000} onChange={cambiarVentas} etiqueta="ventas mensuales aprox." />
+            </label>
+
+            <label className="block">
+              <span className="flex items-baseline justify-between gap-4">
+                <span className="text-base font-semibold">Compras mensuales con factura (sin IVA)</span>
+                <span className="font-mono text-lg text-cancha">{clp(compras)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={40000000}
+                step={100000}
+                value={compras}
+                onChange={(e) => cambiarCompras(+e.target.value)}
+                className="mt-3 w-full accent-cancha"
+                aria-label="Compras mensuales con factura"
+              />
+              <Ajustar valor={compras} min={0} max={40000000} paso={500000} onChange={cambiarCompras} etiqueta="compras mensuales con factura" />
+              <p className="mt-2 text-sm text-humo">El IVA de tus compras se descuenta del IVA de tus ventas.</p>
             </label>
 
             <label className="block">
@@ -173,12 +186,16 @@ export default function Calculadora() {
 
             <dl className="mt-7 space-y-3 border-t border-linea pt-6 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-humo">Tu IVA mensual estimado</dt>
+                <dt className="text-humo">Tu IVA a pagar al mes (ventas − compras)</dt>
                 <dd className="font-mono text-papel">{clp(r.iva)}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-humo">Multas e intereses estimados por {meses} {meses === 1 ? "mes" : "meses"} atrasado{meses === 1 ? "" : "s"}</dt>
-                <dd className="font-mono text-papel">{clp(r.estimado)}</dd>
+                <dt className="text-humo">Multas por {meses} {meses === 1 ? "F29 atrasado" : "F29 atrasados"}</dt>
+                <dd className="font-mono text-papel">{clp(r.multas)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-humo">Intereses</dt>
+                <dd className="font-mono text-papel">{clp(r.intereses)}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-humo">Multas ya pagadas</dt>
@@ -191,6 +208,23 @@ export default function Calculadora() {
             <p className="mt-3 text-center text-sm text-humo">
               Estimación referencial, no constituye asesoría tributaria. Al entrar, tus datos se retoman automáticamente.
             </p>
+            <details className="mt-4 text-sm text-humo">
+              <summary className="min-h-[44px] cursor-pointer py-2 font-semibold text-papel">¿Cómo se calcula?</summary>
+              <ul className="mt-2 space-y-2 leading-relaxed">
+                <li>
+                  <strong className="text-papel">Multa:</strong> 10% del IVA adeudado, más 2% por cada mes de atraso, con tope de{" "}
+                  {Math.round(MULTA_TOPE * 100)}% (art. 97 N°11 del Código Tributario). Si el atraso lo detecta el SII en una
+                  fiscalización, la multa parte en 20%.
+                </li>
+                <li>
+                  <strong className="text-papel">Intereses:</strong> interés penal diario del art. 53 del Código Tributario (Ley
+                  21.713): {(TASA_PENAL.diaria * 100).toLocaleString("es-CL", { maximumFractionDigits: 4 })}% por día, tasa del SII
+                  para el {TASA_PENAL.texto}.
+                  {tasaDesactualizada() && " El SII ya publicó una tasa nueva: el resultado puede variar levemente."}
+                </li>
+                <li>No incluye el reajuste por IPC, que también cobra el SII.</li>
+              </ul>
+            </details>
           </div>
         </div>
       </div>
