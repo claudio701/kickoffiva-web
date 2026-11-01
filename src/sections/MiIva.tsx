@@ -1287,6 +1287,15 @@ export default function MiIva() {
                           </dt>
                           <dd className="whitespace-nowrap font-mono text-papel">− {clp(cierre.creditoFiscal)}</dd>
                         </div>
+                        {(cierre.remanenteAnterior ?? 0) > 0 && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-humo">
+                              Menos lo que te sobró de meses anteriores
+                              <span className="block text-sm">(remanente de crédito fiscal, sin reajuste)</span>
+                            </dt>
+                            <dd className="whitespace-nowrap font-mono text-papel">− {clp(cierre.remanenteAnterior ?? 0)}</dd>
+                          </div>
+                        )}
                         <div className="flex justify-between gap-4 border-t border-linea pt-4">
                           <dt className="text-papel">IVA a pagar</dt>
                           <dd className="whitespace-nowrap font-mono text-papel">{clp(cierre.ivaAPagar)}</dd>

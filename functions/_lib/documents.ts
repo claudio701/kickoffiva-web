@@ -218,6 +218,40 @@ export async function loadDocsPeriodo(env: Env, periodo: string): Promise<Map<st
   return out;
 }
 
+/**
+ * Débito y crédito fiscal de cada período ANTERIOR a `periodo`, por empresa y en orden
+ * cronológico: la entrada de remanenteAcumulado (arrastre del remanente, DL 825 art. 26).
+ * Sin companyId, de todas las empresas (para el cron).
+ */
+export async function movimientosAnteriores(
+  env: Env,
+  periodo: string,
+  companyId?: string,
+): Promise<Map<string, Array<{ periodo: string; debito: number; credito: number }>>> {
+  await ensureDocSchema(env);
+  const llavero = await llaveroDesdeEnv(env);
+  const rows = await selectDocs(
+    env,
+    `WHERE periodo < $1 ${companyId ? 'AND company_id = $2' : ''}`,
+    companyId ? [periodo, companyId] : [periodo],
+  );
+  const porEmpresa = new Map<string, Map<string, { periodo: string; debito: number; credito: number }>>();
+  for (const r of rows) {
+    const d = await decodeRow(llavero, r);
+    const periodos = porEmpresa.get(d.companyId) ?? new Map();
+    const m = periodos.get(d.periodo) ?? { periodo: d.periodo, debito: 0, credito: 0 };
+    if (d.tipo === 'venta') m.debito += d.iva;
+    else if (d.tipo === 'compra') m.credito += d.iva;
+    periodos.set(d.periodo, m);
+    porEmpresa.set(d.companyId, periodos);
+  }
+  const out = new Map<string, Array<{ periodo: string; debito: number; credito: number }>>();
+  for (const [id, periodos] of porEmpresa) {
+    out.set(id, [...periodos.values()].sort((a, b) => a.periodo.localeCompare(b.periodo)));
+  }
+  return out;
+}
+
 export interface ResultadoRecifrado {
   recifrados: number;
   duplicadosEliminados: number;

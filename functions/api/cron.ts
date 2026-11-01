@@ -16,7 +16,8 @@ import { CredencialesInvalidas, SiiClient } from '../_sii/client';
 import { asegurarColumnaRechazo, marcarClaveRechazada } from '../_lib/sii-estado';
 import { actualizarTasaPpmDesdeSii } from '../_lib/ppm';
 import { getSiiCreds, recifrarClaves } from '../_lib/crypto';
-import { loadDocsPeriodo, recifrarDocs, eliminarColumnasLegacy } from '../_lib/documents';
+import { loadDocsPeriodo, movimientosAnteriores, recifrarDocs, eliminarColumnasLegacy } from '../_lib/documents';
+import { calcCierre, remanenteAcumulado } from '../_lib/iva';
 import { ensureAlertsTable, insertAlerta, descifrarAlerta, recifrarAlertas } from '../_lib/alertas';
 
 type CronBindings = { Bindings: Env & { CRON_SECRET?: string } };
@@ -45,30 +46,32 @@ async function empresasConTotales(env: Env, periodo: string): Promise<DatosEmpre
   )) as EmpresaRow[];
   // Los documentos están cifrados: se descifran en la app y se suman aquí.
   const porEmpresa = await loadDocsPeriodo(env, periodo);
+  // Remanente de crédito fiscal arrastrado desde los períodos anteriores (misma lógica que /api/cierre).
+  const anteriores = await movimientosAnteriores(env, periodo);
 
   return rows.map((r) => {
-    let ventasNetas = 0, comprasNetas = 0, debitoFiscal = 0, creditoFiscal = 0;
-    for (const d of porEmpresa.get(r.id) ?? []) {
-      if (d.tipo === 'venta') { ventasNetas += d.neto; debitoFiscal += d.iva; }
-      else if (d.tipo === 'compra') { comprasNetas += d.neto; creditoFiscal += d.iva; }
-    }
-    const ivaAPagar = Math.max(0, debitoFiscal - creditoFiscal);
-    const tasaPpm = Number(r.tasa_ppm) || 0;
-    const ppm = Math.round(ventasNetas * tasaPpm);
-    const tieneDatos = ventasNetas + comprasNetas > 0;
+    const docs = porEmpresa.get(r.id) ?? [];
+    const montos = (tipo: 'venta' | 'compra') =>
+      docs.filter((d) => d.tipo === tipo).map((d) => ({ neto: d.neto, iva: d.iva }));
+    const res = calcCierre(
+      montos('venta'),
+      montos('compra'),
+      Number(r.tasa_ppm) || 0,
+      remanenteAcumulado(anteriores.get(r.id) ?? []),
+    );
     return {
       companyId: r.id,
       nombreEmpresa: r.nombre,
       nombrePersona: r.persona,
       telefono: r.telefono,
-      ventasNetas,
-      comprasNetas,
-      debitoFiscal,
-      creditoFiscal,
-      ivaAPagar,
-      ppm,
-      totalAPagar: ivaAPagar + ppm,
-      tieneDatos,
+      ventasNetas: res.ventasNetas,
+      comprasNetas: res.comprasNetas,
+      debitoFiscal: res.debitoFiscal,
+      creditoFiscal: res.creditoFiscal,
+      ivaAPagar: res.ivaAPagar,
+      ppm: res.ppm,
+      totalAPagar: res.totalAPagar,
+      tieneDatos: docs.length > 0,
     };
   });
 }

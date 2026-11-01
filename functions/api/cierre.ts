@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { authUser, resolveCompany } from '../_lib/jwt';
-import { calcCierre, type DocSii } from '../_lib/iva';
-import { loadDocs } from '../_lib/documents';
+import { calcCierre, remanenteAcumulado, type DocSii } from '../_lib/iva';
+import { loadDocs, movimientosAnteriores } from '../_lib/documents';
 
 const cierre = new Hono<{ Bindings: Env }>();
 
@@ -77,7 +77,11 @@ async function handleCierre(
   )) as { tasa_ppm: number | string | null }[];
   const tasaPpm = Number(companyRows[0]?.tasa_ppm) || 0;
 
-  const result = calcCierre(ventas, compras, tasaPpm);
+  // Remanente de crédito fiscal arrastrado desde los períodos anteriores cargados.
+  const anteriores = await movimientosAnteriores(env, periodo, companyId);
+  const remanenteAnterior = remanenteAcumulado(anteriores.get(companyId) ?? []);
+
+  const result = calcCierre(ventas, compras, tasaPpm, remanenteAnterior);
   const estado =
     ventas.length + compras.length === 0 ? 'sin_datos' : 'listo';
 
@@ -87,6 +91,7 @@ async function handleCierre(
     comprasNetas: result.comprasNetas,
     debitoFiscal: result.debitoFiscal,
     creditoFiscal: result.creditoFiscal,
+    remanenteAnterior: result.remanenteAnterior,
     ivaAPagar: result.ivaAPagar,
     creditoArrastrable: result.creditoArrastrable,
     ppm: result.ppm,
