@@ -77,7 +77,8 @@ cron.post('/generar', async (c) => {
   if (!autorizado(c)) return c.json({ error: 'No autorizado' }, 401);
 
   await ensureAlertsTable(c.env);
-  const { fecha, dia, periodo } = hoyEnChile();
+  // periodo = período tributario (mes anterior): el que se declara en el F29 de este mes.
+  const { fecha, dia, periodo, mes } = hoyEnChile();
   const empresas = await empresasConTotales(c.env, periodo);
 
   let creadas = 0;
@@ -121,7 +122,8 @@ cron.post('/generar', async (c) => {
       if (!creds) continue;
       const client = new SiiClient(c.env as { SII_MOCK?: string });
       await client.login(creds.rut, creds.clave);
-      // Con la sesión abierta, refrescamos también la tasa de PPM que fija el SII.
+      // Con la sesión abierta, refrescamos también la tasa de PPM que fija el SII
+      // (la de la propuesta F29 del período que se declara, igual que /api/sii).
       if ((await actualizarTasaPpmDesdeSii(c.env, emp.id, client, periodo.replace('-', ''))) !== null) {
         tasasPpm += 1;
       }
@@ -129,13 +131,14 @@ cron.post('/generar', async (c) => {
       siiRevisadas += 1;
       if (!notif.hay) continue;
       // Dedupe por contenido: cada notificación distinta genera su propia fila.
+      // El buzón no depende del período tributario: se agrupa por mes calendario.
       const clave = notif.titulos.join('|') || 'sin-detalle';
       let hash = 0;
       for (let i = 0; i < clave.length; i++) hash = (hash * 31 + clave.charCodeAt(i)) >>> 0;
       const tipo = `sii_notif_${hash.toString(36)}`;
       const creada = await insertAlerta(c.env, {
         companyId: emp.id,
-        periodo,
+        periodo: mes,
         tipo,
         mensaje: alertaSiiNotificacion(emp.persona, emp.nombre, notif.titulos),
         telefono: emp.telefono,

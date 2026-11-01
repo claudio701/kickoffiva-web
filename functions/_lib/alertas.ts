@@ -47,6 +47,27 @@ export async function ensureAlertsTable(env: Env): Promise<void> {
      )`,
   );
   await q(env, `CREATE INDEX IF NOT EXISTS alerts_fecha_idx ON alerts (fecha)`);
+  // Antes las alertas del F29 se guardaban con el mes calendario (periodo = mes de
+  // `fecha`); ahora con el período que se declara (mes anterior). Se corrigen las
+  // antiguas para que no choquen con las nuevas en UNIQUE(company_id, periodo, tipo).
+  // Idempotente: una fila corregida ya no cumple periodo = mes de fecha. Fila a fila y
+  // de la más antigua a la más nueva: así nunca choca con otra aún no corregida.
+  // Ver migrations/006_alertas_periodo_tributario.sql.
+  const antiguas = (await q(
+    env,
+    `SELECT id FROM alerts
+      WHERE tipo IN ('preparacion', 'faltan_libros', 'numero', 'recordatorio', 'ultimo_dia')
+        AND periodo = to_char(fecha, 'YYYY-MM')
+      ORDER BY fecha ASC, id ASC`,
+  )) as { id: string }[];
+  for (const r of antiguas) {
+    await q(
+      env,
+      `UPDATE alerts SET periodo = to_char(date_trunc('month', fecha) - interval '1 month', 'YYYY-MM')
+        WHERE id = $1 AND periodo = to_char(fecha, 'YYYY-MM')`,
+      [r.id],
+    );
+  }
   alertsTableChecked = true;
 }
 
