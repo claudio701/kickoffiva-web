@@ -10,20 +10,39 @@ export interface AuthUser {
   companyId: string | null;
 }
 
-/** Signs an HS256 JWT with payload {sub: userId, exp} valid for 30 days. */
-export async function signToken(userId: string, secret: string): Promise<string> {
-  const exp = Math.floor(Date.now() / 1000) + THIRTY_DAYS_SECONDS;
-  return sign({ sub: userId, exp }, secret);
+let columnaSesionLista = false;
+
+/**
+ * Crea users.sesion_version si falta (idempotente; equivale a migrations/007).
+ * Cada sesión (JWT) lleva la versión vigente al firmarse; al cambiar la
+ * contraseña la versión sube y todas las sesiones anteriores dejan de valer.
+ */
+export async function asegurarSesionVersion(env: Env): Promise<void> {
+  if (columnaSesionLista) return;
+  await q(env, 'ALTER TABLE users ADD COLUMN IF NOT EXISTS sesion_version integer NOT NULL DEFAULT 0');
+  columnaSesionLista = true;
 }
 
-/** Verifies an HS256 JWT and returns the user id (sub), or null if invalid. */
+/** Signs an HS256 JWT with payload {sub: userId, ver, exp} valid for 30 days. */
+export async function signToken(userId: string, secret: string, version = 0): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + THIRTY_DAYS_SECONDS;
+  return sign({ sub: userId, ver: version, exp }, secret);
+}
+
+/**
+ * Verifies an HS256 JWT and returns {userId, version}, or null if invalid.
+ * Tokens firmados antes de existir `ver` cuentan como versión 0.
+ */
 export async function verifyToken(
   token: string,
   secret: string,
-): Promise<string | null> {
+): Promise<{ userId: string; version: number } | null> {
   try {
     const payload = await verify(token, secret, 'HS256');
-    return typeof payload.sub === 'string' ? payload.sub : null;
+    if (typeof payload.sub !== 'string') return null;
+    const version = payload.ver === undefined ? 0 : payload.ver;
+    if (typeof version !== 'number' || !Number.isInteger(version)) return null;
+    return { userId: payload.sub, version };
   } catch {
     return null;
   }
@@ -41,14 +60,22 @@ export async function authUser(
   if (!header || !header.startsWith('Bearer ')) return null;
   const token = header.slice('Bearer '.length).trim();
   if (!token) return null;
-  const userId = await verifyToken(token, c.env.JWT_SECRET);
-  if (!userId) return null;
-  const rows = await q<{ id: string }>(
+  const claims = await verifyToken(token, c.env.JWT_SECRET);
+  if (!claims) return null;
+  await asegurarSesionVersion(c.env);
+  // Una sola consulta: el usuario debe existir y la versión de la sesión debe
+  // ser la vigente (cambiar la contraseña invalida las sesiones anteriores).
+  const rows = await q<{ sesion_version: number; company_id: string | null }>(
     c.env,
-    'SELECT id FROM companies WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1',
-    [userId],
+    `SELECT u.sesion_version,
+            (SELECT id FROM companies WHERE user_id = u.id ORDER BY created_at ASC LIMIT 1) AS company_id
+       FROM users u
+      WHERE u.id = $1`,
+    [claims.userId],
   );
-  return { userId, companyId: rows[0]?.id ?? null };
+  const row = rows[0];
+  if (!row || Number(row.sesion_version) !== claims.version) return null;
+  return { userId: claims.userId, companyId: row.company_id ?? null };
 }
 
 /**
