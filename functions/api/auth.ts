@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { q, type Env } from '../_lib/db';
 import { hashPassword, verifyPassword } from '../_lib/passwords';
-import { signToken, authUser } from '../_lib/jwt';
+import { signToken, authUser, asegurarSesionVersion } from '../_lib/jwt';
 import { correoDisponible, enviarLinkRecuperacion, consumirToken, type RecuperarEnv } from '../_lib/recuperar';
 import { rutValido, formatearRut, limpiarRut } from '../_lib/rut';
 import { texto, email as emailNorm } from '../_lib/sanitize';
@@ -24,6 +24,7 @@ export interface UserRow {
   email: string;
   nombre: string | null;
   password_hash: string;
+  sesion_version?: number;
 }
 
 /** companies table row shape (subset used by auth). */
@@ -203,11 +204,12 @@ auth.post('/login', async (c) => {
     return c.json({ error: MSG_VERIFICACION }, 400);
   }
 
+  await asegurarSesionVersion(c.env);
   const users = email
-    ? await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash FROM users WHERE email = $1 LIMIT 1', [email])
+    ? await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash, sesion_version FROM users WHERE email = $1 LIMIT 1', [email])
     : await q<UserRow>(
         c.env,
-        `SELECT DISTINCT u.id, u.email, u.nombre, u.password_hash
+        `SELECT DISTINCT u.id, u.email, u.nombre, u.password_hash, u.sesion_version
            FROM users u JOIN companies co ON co.user_id = u.id
           WHERE regexp_replace(upper(co.rut), '[^0-9K]', '', 'g') = $1
           LIMIT 2`,
@@ -231,7 +233,7 @@ auth.post('/login', async (c) => {
     [user.id],
   );
 
-  const token = await signToken(user.id, c.env.JWT_SECRET);
+  const token = await signToken(user.id, c.env.JWT_SECRET, Number(user.sesion_version ?? 0));
   return c.json({ token, user: toPublicUser(user, companies[0]) });
 });
 
@@ -297,8 +299,19 @@ auth.post('/restablecer', async (c) => {
   if (!userId) {
     return c.json({ error: 'El link ya se usó o venció. Pide uno nuevo con "¿Olvidaste tu contraseña?".' }, 400);
   }
-  await q(c.env, 'UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(password), userId]);
-  const users = await q<UserRow>(c.env, 'SELECT id, email, nombre, password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+  // Contraseña nueva => sube la versión de sesión: toda sesión abierta antes
+  // (incluida una robada) deja de valer. También se anulan los demás links pendientes.
+  await asegurarSesionVersion(c.env);
+  await q(c.env, 'UPDATE users SET password_hash = $1, sesion_version = sesion_version + 1 WHERE id = $2', [
+    await hashPassword(password),
+    userId,
+  ]);
+  await q(c.env, 'UPDATE password_resets SET usado = true WHERE user_id = $1 AND usado = false', [userId]);
+  const users = await q<UserRow>(
+    c.env,
+    'SELECT id, email, nombre, password_hash, sesion_version FROM users WHERE id = $1 LIMIT 1',
+    [userId],
+  );
   const user = users[0];
   if (!user) return c.json({ error: 'No encontramos la cuenta.' }, 400);
   await limpiar(c.env, await claveIntento('login-cuenta', user.email));
@@ -307,7 +320,7 @@ auth.post('/restablecer', async (c) => {
     'SELECT id, user_id, nombre, rut FROM companies WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1',
     [user.id],
   );
-  const token = await signToken(user.id, c.env.JWT_SECRET);
+  const token = await signToken(user.id, c.env.JWT_SECRET, Number(user.sesion_version ?? 0));
   return c.json({ token, user: toPublicUser(user, companies[0]) });
 });
 
